@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import { headers } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,24 +11,37 @@ type UserPayload = {
   };
 };
 
-function buildApiUrl(username: string): string {
-  const configuredBase = process.env.NEXT_PUBLIC_API_URL;
-
-  const computedBase =
-    configuredBase && configuredBase.length > 0
-      ? configuredBase
-      : process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : '';
-
-  const sanitizedBase = computedBase.replace(/\/$/, '');
-
-  return `${sanitizedBase}/api/users/${encodeURIComponent(username)}`;
-}
-
 async function getDemoUser(): Promise<UserPayload | null> {
   const username = process.env.NEXT_PUBLIC_DEMO_USERNAME ?? 'demo.user';
-  const url = buildApiUrl(username);
+  const configuredBase = process.env.NEXT_PUBLIC_API_URL?.trim();
+  const headerBag = await headers();
+  const host = headerBag.get('host')?.trim();
+  const protocol =
+    configuredBase?.startsWith('http://') ||
+    host?.startsWith('localhost') ||
+    host?.startsWith('127.')
+      ? 'http'
+      : 'https';
+
+  const base =
+    configuredBase && configuredBase.length > 0
+      ? configuredBase.replace(/\/$/, '')
+      : host
+        ? `${protocol}://${host}`.replace(/\/$/, '')
+        : process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`.replace(/\/$/, '')
+          : '';
+
+  if (!base) {
+    console.error('[frontend] Unable to determine API base URL', {
+      configuredBase,
+      host,
+      vercelUrl: process.env.VERCEL_URL,
+    });
+    return null;
+  }
+
+  const url = `${base}/api/users/${encodeURIComponent(username)}`;
 
   try {
     console.log('[frontend] Requesting user', { url, username });
