@@ -11,15 +11,18 @@ type UserPayload = {
 };
 
 function buildApiUrl(username: string): string {
-  const preferredBase = process.env.NEXT_PUBLIC_API_URL ?? '';
-  const sanitizedBase = preferredBase.replace(/\/$/, '');
-  const prefix = sanitizedBase.length > 0 ? sanitizedBase : '';
+  const configuredBase = process.env.NEXT_PUBLIC_API_URL;
 
-  if (prefix.length === 0) {
-    return `/api/users/${encodeURIComponent(username)}`;
-  }
+  const computedBase =
+    configuredBase && configuredBase.length > 0
+      ? configuredBase
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : '';
 
-  return `${prefix}/api/users/${encodeURIComponent(username)}`;
+  const sanitizedBase = computedBase.replace(/\/$/, '');
+
+  return `${sanitizedBase}/api/users/${encodeURIComponent(username)}`;
 }
 
 async function getDemoUser(): Promise<UserPayload | null> {
