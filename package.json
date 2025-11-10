@@ -1,0 +1,15 @@
+{
+  "name": "penactive",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace web"
+  },
+  "engines": {
+    "node": ">=18.17"
+  }
+}
+
