@@ -12,6 +12,10 @@ function buildApiUrl(username: string): string {
   const sanitizedBase = preferredBase.replace(/\/$/, '');
   const prefix = sanitizedBase.length > 0 ? sanitizedBase : '';
 
+  if (prefix.length === 0) {
+    return `/api/users/${encodeURIComponent(username)}`;
+  }
+
   return `${prefix}/api/users/${encodeURIComponent(username)}`;
 }
 
