@@ -17,7 +17,7 @@ const supabase =
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ username: string }> }
+  context: any
 ) {
   if (!supabase) {
     return NextResponse.json(
@@ -26,7 +26,7 @@ export async function GET(
     );
   }
 
-  const { username } = await params;
+  const { username } = await Promise.resolve(context?.params);
   const trimmedUsername = username?.trim();
 
   if (!trimmedUsername) {
