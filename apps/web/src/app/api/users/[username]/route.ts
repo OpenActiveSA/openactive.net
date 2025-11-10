@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, RouteHandler } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -16,10 +16,10 @@ const supabase =
     ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
     : null;
 
-export async function GET(
+export const GET: RouteHandler = async (
   _request: NextRequest,
-  context: any
-) {
+  context
+) => {
   if (!supabase) {
     return NextResponse.json(
       { error: 'SUPABASE_NOT_CONFIGURED' },
@@ -51,5 +51,5 @@ export async function GET(
   }
 
   return NextResponse.json({ user: data });
-}
+};
 
