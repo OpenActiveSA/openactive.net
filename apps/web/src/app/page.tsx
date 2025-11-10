@@ -1,3 +1,6 @@
+import { promises as fs } from 'fs';
+import path from 'path';
+
 export const dynamic = 'force-dynamic';
 
 type UserPayload = {
@@ -53,10 +56,16 @@ async function getDemoUser(): Promise<UserPayload | null> {
 
 async function getVersion(): Promise<string> {
   try {
-    const response = await fetch(`${buildApiUrl('')}.version-placeholder`, {
-      cache: 'no-store',
-    });
-    return 'dev';
+    const filePath = path.join(process.cwd(), 'public', 'version.txt');
+    const contents = await fs.readFile(filePath, 'utf-8');
+    const trimmed = contents.trim();
+
+    if (!trimmed) {
+      console.warn('[frontend] Version file is empty, falling back to default');
+      return '0.0.0';
+    }
+
+    return trimmed;
   } catch (error) {
     console.error('[frontend] Failed to read version file', error);
     return 'dev';
@@ -67,6 +76,7 @@ export default async function Home() {
   const [data, version] = await Promise.all([getDemoUser(), getVersion()]);
   const displayName = data?.user.displayName ?? 'Demo User';
   const username = data?.user.username ?? 'demo.user';
+  const hasData = Boolean(data);
 
   return (
     <div
@@ -98,6 +108,11 @@ export default async function Home() {
             {displayName}
           </p>
           <p style={{ fontSize: '1rem', color: '#555555' }}>@{username}</p>
+          {!hasData && (
+            <p style={{ marginTop: '0.75rem', color: '#b42323' }}>
+              Unable to load live data. Showing fallback content.
+            </p>
+          )}
         </div>
       </main>
       <footer

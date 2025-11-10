@@ -28,6 +28,8 @@ export const GET: RouteHandler = async (
     return NextResponse.json({ error: 'MISSING_USERNAME' }, { status: 400 });
   }
 
+  console.log('[api/users] Fetching user', { username: trimmedUsername });
+
   const { data, error } = await supabase
     .from('User')
     .select('id, username, displayName, email, role')
@@ -36,13 +38,25 @@ export const GET: RouteHandler = async (
     .maybeSingle();
 
   if (error) {
-    console.error('Supabase query failed', error);
+    console.error('[api/users] Supabase query failed', {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
     return NextResponse.json({ error: 'DATABASE_ERROR' }, { status: 500 });
   }
 
   if (!data) {
+    console.warn('[api/users] User not found', { username: trimmedUsername });
     return NextResponse.json({ error: 'USER_NOT_FOUND' }, { status: 404 });
   }
+
+  console.log('[api/users] Returning user', {
+    id: data.id,
+    username: data.username,
+    displayName: data.displayName,
+  });
 
   return NextResponse.json({ user: data });
 };
