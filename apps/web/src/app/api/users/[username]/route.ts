@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -16,8 +16,8 @@ const supabase =
     : null;
 
 export async function GET(
-  _request: Request,
-  context: { params: { username: string } }
+  _request: NextRequest,
+  context: { params: { username: string } } | { params: Promise<{ username: string }> }
 ) {
   if (!supabase) {
     return NextResponse.json(
@@ -26,16 +26,17 @@ export async function GET(
     );
   }
 
-  const username = context.params.username?.trim();
+  const { username } = await Promise.resolve(context.params);
+  const trimmedUsername = username?.trim();
 
-  if (!username) {
+  if (!trimmedUsername) {
     return NextResponse.json({ error: 'MISSING_USERNAME' }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from('User')
     .select('id, username, displayName, email, role')
-    .eq('username', username)
+    .eq('username', trimmedUsername)
     .limit(1)
     .maybeSingle();
 
