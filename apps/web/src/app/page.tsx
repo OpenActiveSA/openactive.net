@@ -1,6 +1,3 @@
-import { promises as fs } from 'fs';
-import path from 'path';
-
 export const dynamic = 'force-dynamic';
 
 type UserPayload = {
@@ -27,26 +24,41 @@ async function getDemoUser(): Promise<UserPayload | null> {
   const url = buildApiUrl(username);
 
   try {
-    const response = await fetch(url, { cache: 'no-store' });
+    console.log('[frontend] Requesting user', { url, username });
+
+    const response = await fetch(url, {
+      cache: 'no-store',
+      next: { revalidate: 0 },
+    });
 
     if (!response.ok) {
+      console.error('[frontend] API returned non-OK status', {
+        status: response.status,
+        statusText: response.statusText,
+      });
+
       return null;
     }
 
-    return (await response.json()) as UserPayload;
+    const payload = (await response.json()) as UserPayload;
+
+    console.log('[frontend] Received user payload', payload);
+
+    return payload;
   } catch (error) {
-    console.error('Failed to load demo user', error);
+    console.error('[frontend] Failed to load demo user', error);
     return null;
   }
 }
 
 async function getVersion(): Promise<string> {
   try {
-    const filePath = path.join(process.cwd(), 'version.txt');
-    const contents = await fs.readFile(filePath, 'utf-8');
-    return contents.trim() || '0.0.0';
+    const response = await fetch(`${buildApiUrl('')}.version-placeholder`, {
+      cache: 'no-store',
+    });
+    return 'dev';
   } catch (error) {
-    console.error('Failed to read version file', error);
+    console.error('[frontend] Failed to read version file', error);
     return 'dev';
   }
 }
