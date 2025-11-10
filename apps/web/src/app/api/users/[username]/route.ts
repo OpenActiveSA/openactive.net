@@ -2,30 +2,24 @@
 import { NextRequest, NextResponse, RouteHandler } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !serviceRoleKey) {
-  console.warn(
-    'Supabase environment variables are missing. API routes depending on Supabase will fail.'
-  );
-}
-
-const supabase =
-  supabaseUrl && serviceRoleKey
-    ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
-    : null;
-
 export const GET: RouteHandler = async (
   _request: NextRequest,
   context
 ) => {
-  if (!supabase) {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error('Supabase environment variables are missing or invalid.');
     return NextResponse.json(
       { error: 'SUPABASE_NOT_CONFIGURED' },
       { status: 500 }
     );
   }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
 
   const { username } = await Promise.resolve(context?.params);
   const trimmedUsername = username?.trim();
