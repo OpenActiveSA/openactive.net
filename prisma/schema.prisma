@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DATABASE_DIRECT_URL")
+  extensions = [citext()]
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique @db.Citext
+  displayName    String
+  username       String   @unique @db.Citext
+  avatarUrl      String?  @db.Text
+  passwordHash   String?  @db.Text
+  magicLinkToken String?  @unique
+  clubId         String?
+  role           Role     @default(MEMBER)
+  isActive       Boolean  @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([clubId])
+}
+
+enum Role {
+  SUPER_ADMIN
+  CLUB_ADMIN
+  MEMBER
+}
+
