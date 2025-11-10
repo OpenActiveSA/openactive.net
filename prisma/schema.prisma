@@ -6,16 +6,15 @@ datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
   directUrl  = env("DATABASE_DIRECT_URL")
-  extensions = [citext()]
 }
 
 model User {
   id             String   @id @default(cuid())
-  email          String   @unique @db.Citext
+  email          String   @unique
   displayName    String
-  username       String   @unique @db.Citext
-  avatarUrl      String?  @db.Text
-  passwordHash   String?  @db.Text
+  username       String   @unique
+  avatarUrl      String?
+  passwordHash   String?
   magicLinkToken String?  @unique
   clubId         String?
   role           Role     @default(MEMBER)
