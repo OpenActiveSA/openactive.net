@@ -4,15 +4,15 @@ const prisma = new PrismaClient();
 
 async function main() {
   await prisma.user.upsert({
-    where: { email: 'demo@penactive.local' },
+    where: { email: 'demo@openactive.local' },
     update: {
-      displayName: 'PenActive Demo',
+      displayName: 'OpenActive Demo',
       username: 'demo.user',
       isActive: true,
     },
     create: {
-      email: 'demo@penactive.local',
-      displayName: 'PenActive Demo',
+      email: 'demo@openactive.local',
+      displayName: 'OpenActive Demo',
       username: 'demo.user',
       role: 'SUPER_ADMIN',
     },

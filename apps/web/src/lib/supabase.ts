@@ -1,0 +1,97 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+/**
+ * Get Supabase client based on environment
+ * 
+ * Priority order:
+ * 1. Custom URL/key (if provided)
+ * 2. Local Supabase (if USE_LOCAL_SUPABASE=true and in development)
+ * 3. Environment variables (SUPABASE_URL, SUPABASE_ANON_KEY, etc.)
+ * 
+ * Local Development:
+ * - Run `npm run supabase:start` to start local Supabase
+ * - Set USE_LOCAL_SUPABASE=true in .env.local to use local instance
+ * - Local Supabase runs on http://127.0.0.1:54321
+ * 
+ * Remote Projects (Free Tier):
+ * - Create separate Supabase projects for dev/test and production
+ * - Set SUPABASE_URL and keys in environment variables
+ * - Use different env vars for different environments
+ */
+export function getSupabaseClient(options?: {
+  useServiceRole?: boolean;
+  customUrl?: string;
+  customKey?: string;
+  useLocal?: boolean;
+}): SupabaseClient {
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const useLocal = options?.useLocal ?? process.env.USE_LOCAL_SUPABASE === 'true';
+  
+  let supabaseUrl: string | undefined;
+  let supabaseKey: string | undefined;
+
+  // Priority 1: Custom override
+  if (options?.customUrl && options?.customKey) {
+    supabaseUrl = options.customUrl;
+    supabaseKey = options.customKey;
+  }
+  // Priority 2: Local Supabase (development only)
+  else if (useLocal && isDevelopment) {
+    supabaseUrl = process.env.SUPABASE_LOCAL_URL || 'http://127.0.0.1:54321';
+    supabaseKey = options?.useServiceRole
+      ? process.env.SUPABASE_LOCAL_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+      : process.env.SUPABASE_LOCAL_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+  }
+  // Priority 3: Environment variables
+  else {
+    supabaseUrl = process.env.SUPABASE_URL;
+    supabaseKey = options?.useServiceRole
+      ? process.env.SUPABASE_SERVICE_ROLE_KEY
+      : process.env.SUPABASE_ANON_KEY;
+  }
+
+  if (!supabaseUrl || !supabaseKey) {
+    const missing = !supabaseUrl ? 'SUPABASE_URL' : 'SUPABASE_ANON_KEY/SERVICE_ROLE_KEY';
+    const hint = useLocal && isDevelopment
+      ? 'Make sure local Supabase is running (`npm run supabase:start`) and check your .env.local file.'
+      : 'Please set the appropriate environment variables in your .env.local file.';
+    
+    throw new Error(
+      `Supabase configuration missing: ${missing}. ${hint} ` +
+      `Environment: ${process.env.NODE_ENV || 'unknown'}, ` +
+      `Using local: ${useLocal}`
+    );
+  }
+
+  // Log which environment we're using (only in development)
+  if (isDevelopment) {
+    const mode = useLocal ? 'local' : 'remote';
+    const keyType = options?.useServiceRole ? 'service role' : 'anon';
+    console.log(`[Supabase] Mode: ${mode}, Key: ${keyType}`);
+    console.log(`[Supabase] URL: ${supabaseUrl.substring(0, 40)}...`);
+  }
+
+  return createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      persistSession: options?.useServiceRole ? false : true,
+      autoRefreshToken: !options?.useServiceRole,
+    },
+  });
+}
+
+/**
+ * Server-side Supabase client (uses service role key)
+ * Use this for API routes and server components
+ */
+export function getSupabaseServerClient(): SupabaseClient {
+  return getSupabaseClient({ useServiceRole: true });
+}
+
+/**
+ * Client-side Supabase client (uses anon key)
+ * Use this in client components and browser code
+ */
+export function getSupabaseClientClient(): SupabaseClient {
+  return getSupabaseClient({ useServiceRole: false });
+}
+

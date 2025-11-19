@@ -1,72 +1,50 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { headers } from 'next/headers';
+import { getSupabaseServerClient } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
-type UserPayload = {
-  user: {
-    username: string;
-    displayName: string;
-  };
+type UserData = {
+  username: string;
+  displayName: string;
 };
 
-async function getDemoUser(): Promise<UserPayload | null> {
+async function getDemoUser(): Promise<UserData | null> {
   const username = process.env.NEXT_PUBLIC_DEMO_USERNAME ?? 'demo.user';
-  const configuredBase = process.env.NEXT_PUBLIC_API_URL?.trim();
-  const headerBag = await headers();
-  const host = headerBag.get('host')?.trim();
-  const protocol =
-    configuredBase?.startsWith('http://') ||
-    host?.startsWith('localhost') ||
-    host?.startsWith('127.')
-      ? 'http'
-      : 'https';
-
-  const base =
-    configuredBase && configuredBase.length > 0
-      ? configuredBase.replace(/\/$/, '')
-      : host
-        ? `${protocol}://${host}`.replace(/\/$/, '')
-        : process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`.replace(/\/$/, '')
-          : '';
-
-  if (!base) {
-    console.error('[frontend] Unable to determine API base URL', {
-      configuredBase,
-      host,
-      vercelUrl: process.env.VERCEL_URL,
-    });
-    return null;
-  }
-
-  const url = `${base}/api/users/${encodeURIComponent(username)}`;
 
   try {
-    console.log('[frontend] Requesting user', { url, username });
+    const supabase = getSupabaseServerClient();
+    
+    console.log('[web] Fetching user from database', { username });
 
-    const response = await fetch(url, {
-      cache: 'no-store',
-      next: { revalidate: 0 },
-    });
+    const { data, error } = await supabase
+      .from('User')
+      .select('username, displayName')
+      .eq('username', username)
+      .limit(1)
+      .maybeSingle();
 
-    if (!response.ok) {
-      console.error('[frontend] API returned non-OK status', {
-        status: response.status,
-        statusText: response.statusText,
+    if (error) {
+      console.error('[web] Database query failed', {
+        message: error.message,
+        code: error.code,
       });
-
       return null;
     }
 
-    const payload = (await response.json()) as UserPayload;
+    if (!data) {
+      console.warn('[web] User not found', { username });
+      return null;
+    }
 
-    console.log('[frontend] Received user payload', payload);
+    console.log('[web] User found', { username: data.username, displayName: data.displayName });
 
-    return payload;
+    return {
+      username: data.username,
+      displayName: data.displayName,
+    };
   } catch (error) {
-    console.error('[frontend] Failed to load demo user', error);
+    console.error('[web] Failed to load user from database', error);
     return null;
   }
 }
@@ -91,8 +69,8 @@ async function getVersion(): Promise<string> {
 
 export default async function Home() {
   const [data, version] = await Promise.all([getDemoUser(), getVersion()]);
-  const displayName = data?.user.displayName ?? 'Demo User';
-  const username = data?.user.username ?? 'demo.user';
+  const displayName = data?.displayName ?? 'Demo User';
+  const username = data?.username ?? 'demo.user';
   const hasData = Boolean(data);
 
   return (

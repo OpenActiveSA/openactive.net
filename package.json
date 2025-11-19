@@ -1,5 +1,5 @@
 {
-  "name": "penactive",
+  "name": "openactive",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
@@ -7,20 +7,39 @@
   ],
   "scripts": {
     "dev:web": "npm run dev --workspace web",
-    "dev:api": "npm run dev --workspace @penactive/api",
+    "dev:api": "npm run dev --workspace @openactive/api",
+    "dev:mobile": "npm run start --workspace mobile",
+    "mobile:android": "npm run android --workspace mobile",
+    "mobile:ios": "npm run ios --workspace mobile",
+    "mobile:web": "npm run web --workspace mobile",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:reset": "supabase db reset",
+    "supabase:migration:new": "supabase migration new",
+    "supabase:migration:up": "supabase migration up",
+    "supabase:link": "supabase link --project-ref",
+    "supabase:db:push": "supabase db push",
+    "supabase:db:push:remote": "supabase db push --remote",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "engines": {
     "node": ">=18.17"
   },
   "devDependencies": {
-    "prisma": "^6.19.0"
+    "prisma": "^6.19.0",
+    "supabase": "^2.58.5"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.0"
+    "@prisma/client": "^6.19.0",
+    "expo": "~53.0.24",
+    "react": "19.0.0",
+    "react-native": "0.79.6"
   },
   "prisma": {
     "seed": "node prisma/seed.mjs"
