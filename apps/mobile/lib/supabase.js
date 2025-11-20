@@ -27,6 +27,13 @@ export function getSupabaseClient() {
     );
   }
 
+  // Check for placeholder values
+  if (supabaseKey === 'your-anon-key-here' || supabaseKey.includes('paste-your') || supabaseKey.includes('your-')) {
+    throw new Error(
+      `Invalid API key: Please replace the placeholder value in apps/mobile/.env with your actual Supabase anon key. Get your key from: https://supabase.com/dashboard/project/buahkjwwahvnpjlkvnjv/settings/api Then update EXPO_PUBLIC_SUPABASE_ANON_KEY in apps/mobile/.env and restart the app.`
+    );
+  }
+
   // For Android emulator, replace 127.0.0.1 with 10.0.2.2
   // This is the special IP that Android emulator uses to access host machine
   if (supabaseUrl.includes('127.0.0.1') || supabaseUrl.includes('localhost')) {

@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { getSupabaseClient } from './lib/supabase';
+
+// Lazy load Supabase to prevent import-time crashes
+let getSupabaseClient;
+try {
+  const supabaseModule = require('./lib/supabase');
+  getSupabaseClient = supabaseModule.getSupabaseClient;
+} catch (err) {
+  console.error('[mobile] Failed to import Supabase:', err);
+  getSupabaseClient = () => {
+    throw new Error('Supabase module failed to load: ' + err.message);
+  };
+}
 
 const DEMO_USERNAME = process.env.EXPO_PUBLIC_DEMO_USERNAME ?? 'demo.user';
 
-export default function App() {
+function AppContent() {
   const [displayName, setDisplayName] = useState('OpenActive Demo');
   const [username, setUsername] = useState('demo.user');
   const [loading, setLoading] = useState(true);
@@ -13,10 +24,36 @@ export default function App() {
 
   useEffect(() => {
     let isMounted = true;
+    let timeoutId;
+
+    // Set a timeout to prevent infinite loading
+    timeoutId = setTimeout(() => {
+      if (isMounted && loading) {
+        console.warn('[mobile] Loading timeout - showing error');
+        setLoading(false);
+        setError('Loading timeout: Please check your connection and try again');
+      }
+    }, 10000); // 10 second timeout
 
     async function fetchUser() {
+      // Small delay to ensure component is mounted
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       try {
-        const supabase = getSupabaseClient();
+        console.log('[mobile] Starting to fetch user...');
+        
+        let supabase;
+        try {
+          supabase = getSupabaseClient();
+          console.log('[mobile] Supabase client created successfully');
+        } catch (configErr) {
+          console.error('[mobile] Failed to initialize Supabase client:', configErr);
+          if (isMounted) {
+            setLoading(false);
+            setError(`Configuration error: ${configErr.message}`);
+          }
+          return; // Exit early if config fails
+        }
         
         console.log('[mobile] Fetching user from database', { 
           username: DEMO_USERNAME,
@@ -58,7 +95,10 @@ export default function App() {
       } catch (err) {
         console.error('[mobile] Failed to fetch user from database', err);
         if (isMounted) {
-          setError(err.message || 'Unknown error occurred');
+          // Format error message for display (remove newlines, truncate if too long)
+          let errorMessage = err.message || 'Unknown error occurred';
+          errorMessage = errorMessage.replace(/\n/g, ' ').substring(0, 200);
+          setError(errorMessage);
         }
       } finally {
         if (isMounted) {
@@ -71,20 +111,29 @@ export default function App() {
 
     return () => {
       isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
   }, []);
 
+  // Always render something - never return null
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
       <Text style={styles.title}>openactive</Text>
       <Text style={styles.subtitle}>mobile</Text>
       {loading ? (
-        <ActivityIndicator color="#f5f7ff" />
+        <>
+          <ActivityIndicator color="#f5f7ff" size="large" />
+          <Text style={styles.errorHint}>Loading...</Text>
+        </>
       ) : error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorTitle}>Error</Text>
-          <Text style={styles.error}>{error}</Text>
+          <Text style={styles.error} numberOfLines={5}>
+            {error}
+          </Text>
           <Text style={styles.errorHint}>
             Check console logs for details
           </Text>
@@ -166,3 +215,58 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+// Error boundary wrapper to prevent crashes
+export default function App() {
+  const [hasError, setHasError] = useState(false);
+  const [errorInfo, setErrorInfo] = useState(null);
+
+  useEffect(() => {
+    console.log('[mobile] App component mounted');
+    
+    // Global error handler
+    const errorHandler = (error, isFatal) => {
+      console.error('[mobile] Global error:', error, isFatal);
+      if (isFatal) {
+        setHasError(true);
+        setErrorInfo(error?.message || 'Unknown error');
+      }
+    };
+
+    // Set up global error handler for React Native
+    if (global.ErrorUtils) {
+      const originalHandler = global.ErrorUtils.getGlobalHandler();
+      global.ErrorUtils.setGlobalHandler((error, isFatal) => {
+        errorHandler(error, isFatal);
+        if (originalHandler) {
+          originalHandler(error, isFatal);
+        }
+      });
+    }
+
+    return () => {
+      // Cleanup if needed
+    };
+  }, []);
+
+  if (hasError) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <Text style={styles.title}>openactive</Text>
+        <Text style={styles.subtitle}>mobile</Text>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>App Error</Text>
+          <Text style={styles.error}>
+            {errorInfo || 'An unexpected error occurred'}
+          </Text>
+          <Text style={styles.errorHint}>
+            Please restart the app
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return <AppContent />;
+}
