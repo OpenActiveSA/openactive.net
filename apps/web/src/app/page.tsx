@@ -5,48 +5,117 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 
 type UserData = {
-  username: string;
-  displayName: string;
+  email: string;
+  name: string;
+  surname: string;
 };
 
 async function getDemoUser(): Promise<UserData | null> {
-  const username = process.env.NEXT_PUBLIC_DEMO_USERNAME ?? 'demo.user';
+  const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL ?? 'demo@example.com';
 
-  try {
-    const supabase = getSupabaseServerClient();
-    
-    console.log('[web] Fetching user from database', { username });
-
-    const { data, error } = await supabase
-      .from('User')
-      .select('username, displayName')
-      .eq('username', username)
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.error('[web] Database query failed', {
-        message: error.message,
-        code: error.code,
-      });
-      return null;
-    }
-
-    if (!data) {
-      console.warn('[web] User not found', { username });
-      return null;
-    }
-
-    console.log('[web] User found', { username: data.username, displayName: data.displayName });
-
-    return {
-      username: data.username,
-      displayName: data.displayName,
-    };
-  } catch (error) {
-    console.error('[web] Failed to load user from database', error);
+  // Check if Supabase is properly configured before attempting to use it
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn('[web] Supabase not configured - missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
     return null;
   }
+
+  // Wrap in a timeout to prevent infinite hanging
+  return Promise.race([
+    (async () => {
+      try {
+        const supabase = getSupabaseServerClient();
+        console.log('[web] Attempting to fetch user from database', { email: demoEmail });
+        
+        // Query the table with Firstname and Surname columns, using email as identifier
+        let { data, error } = await supabase
+          .from('User')
+          .select('email, Firstname, Surname, displayName')
+          .eq('email', demoEmail)
+          .limit(1)
+          .maybeSingle();
+
+        // If error suggests column doesn't exist, try with just basic columns
+        if (error && (error.message?.includes('column') || error.message?.includes('does not exist'))) {
+          console.warn('[web] Trying alternative query without Firstname/Surname columns');
+          const altQuery = await supabase
+            .from('User')
+            .select('email')
+            .eq('email', demoEmail)
+            .limit(1)
+            .maybeSingle();
+          
+          if (!altQuery.error && altQuery.data) {
+            // Table exists but doesn't have Firstname/Surname - return what we have
+            console.warn('[web] Table exists but missing Firstname/Surname columns. Please run MIGRATE_TO_FIRSTNAME_SURNAME.sql');
+            return {
+              email: altQuery.data.email || demoEmail,
+              name: '',
+              surname: '',
+            };
+          }
+          
+          // Use the original error
+          data = altQuery.data;
+          error = altQuery.error || error;
+        }
+
+        if (error) {
+          // Log the full error object to see its structure
+          console.error('[web] Database query failed:', {
+            error: error,
+            errorString: String(error),
+            errorJSON: JSON.stringify(error, null, 2),
+            code: error?.code,
+            message: error?.message,
+            details: error?.details,
+            hint: error?.hint,
+            status: (error as any)?.status,
+            statusText: (error as any)?.statusText,
+          });
+          
+          // Try to get more info
+          if (error instanceof Error) {
+            console.error('[web] Error is Error instance:', {
+              name: error.name,
+              message: error.message,
+              stack: error.stack,
+            });
+          }
+          
+          return null;
+        }
+
+        if (!data) {
+          console.warn('[web] User not found in database', { email: demoEmail });
+          return null;
+        }
+
+        console.log('[web] Successfully fetched user:', {
+          email: data.email,
+          Firstname: data.Firstname,
+          Surname: data.Surname,
+        });
+        
+        return {
+          email: data.email,
+          name: data.Firstname || '',
+          surname: data.Surname || '',
+        };
+      } catch (err: any) {
+        console.error('[web] Exception while fetching user:', {
+          message: err?.message || String(err),
+          stack: err?.stack,
+        });
+        return null;
+      }
+    })(),
+    new Promise<null>((resolve) => {
+      setTimeout(() => {
+        console.warn('[web] Database query timeout after 5 seconds');
+        resolve(null);
+      }, 5000);
+    }),
+  ]);
 }
 
 async function getVersion(): Promise<string> {
@@ -69,8 +138,8 @@ async function getVersion(): Promise<string> {
 
 export default async function Home() {
   const [data, version] = await Promise.all([getDemoUser(), getVersion()]);
-  const displayName = data?.displayName ?? 'Demo User';
-  const username = data?.username ?? 'demo.user';
+  const fullName = data ? `${data.name || ''} ${data.surname || ''}`.trim() || 'Demo User' : 'Demo User';
+  const email = data?.email ?? 'demo@example.com';
   const hasData = Boolean(data);
 
   return (
@@ -100,9 +169,9 @@ export default async function Home() {
             frontend
           </h1>
           <p style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>
-            {displayName}
+            {fullName}
           </p>
-          <p style={{ fontSize: '1rem', color: '#555555' }}>@{username}</p>
+          <p style={{ fontSize: '1rem', color: '#555555' }}>{email}</p>
           {!hasData && (
             <p style={{ marginTop: '0.75rem', color: '#b42323' }}>
               Unable to load live data. Showing fallback content.

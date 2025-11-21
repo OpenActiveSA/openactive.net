@@ -53,6 +53,18 @@ export function getSupabaseClient() {
       persistSession: true,
       autoRefreshToken: true,
     },
+    global: {
+      headers: {
+        'x-client-info': 'openactive-mobile',
+      },
+    },
+    db: {
+      schema: 'public',
+    },
+    // Increase timeout for slow connections
+    realtime: {
+      timeout: 30000, // 30 seconds
+    },
   });
 }
 

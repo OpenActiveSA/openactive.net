@@ -1,0 +1,251 @@
+/* Design constants - CSS variable for border radius */
+:root {
+  --border-radius: 4px; /* Form fields border radius */
+}
+
+.container {
+  min-height: 100vh;
+  background-color: #052333;
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  padding: 80px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.logoContainer {
+  margin-bottom: 40px;
+}
+
+.logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 40px;
+  background-color: #667eea;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.logoText {
+  font-size: 40px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 8px 0;
+  text-align: center;
+}
+
+.subtitle {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 8px 0 64px 0;
+  text-align: center;
+}
+
+.socialButton {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px; /* Using 4px for consistency as discussed */
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  width: 100%;
+  cursor: pointer;
+  color: #ffffff;
+  font-size: 16px;
+  font-family: inherit;
+}
+
+.googleIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background-color: #4285F4;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.googleIconText {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.facebookIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background-color: #1877F2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.facebookIconText {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.emailIcon {
+  font-size: 20px;
+  margin-right: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.socialButtonText {
+  font-size: 16px;
+  color: #ffffff;
+}
+
+.separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 16px 0;
+  width: 100%;
+}
+
+.separatorText {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.termsText {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  line-height: 18px;
+  padding: 0 20px;
+  margin-top: 20px;
+}
+
+.linkText {
+  color: #667eea;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.fullPageModal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #052333;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.fullPageModalContent {
+  flex: 1;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+  position: relative;
+}
+
+.backButton {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 8px 0;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.backButton:hover {
+  color: #ffffff;
+}
+
+.emailForm {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.formGroup {
+  margin-bottom: 24px;
+  width: 100%;
+}
+
+.emailInput {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 14px 16px;
+  font-size: 16px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  box-sizing: border-box;
+  outline: none;
+  font-family: inherit;
+}
+
+.emailInput::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.emailInput:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.continueButton {
+  width: 100%;
+  padding: 14px;
+  background-color: #667eea;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.2s;
+}
+
+.continueButton:hover:not(:disabled) {
+  background-color: #7c8ef5;
+}
+
+.continueButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

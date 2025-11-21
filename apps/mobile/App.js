@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
+import { AuthScreen } from './screens/AuthScreen';
+import { EmailAuth } from './screens/EmailAuth';
 
 // Lazy load Supabase to prevent import-time crashes
 let getSupabaseClient;
@@ -17,110 +19,175 @@ try {
 const DEMO_USERNAME = process.env.EXPO_PUBLIC_DEMO_USERNAME ?? 'demo.user';
 
 function AppContent() {
+  const [currentScreen, setCurrentScreen] = useState('auth'); // 'auth', 'emailAuth', 'home'
+  const [screenParams, setScreenParams] = useState({});
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [displayName, setDisplayName] = useState('OpenActive Demo');
   const [username, setUsername] = useState('demo.user');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const fetchUser = async (retryCount = 0) => {
     let isMounted = true;
     let timeoutId;
 
-    // Set a timeout to prevent infinite loading
+    // Set a longer timeout to prevent premature timeout (30 seconds)
     timeoutId = setTimeout(() => {
       if (isMounted && loading) {
         console.warn('[mobile] Loading timeout - showing error');
         setLoading(false);
-        setError('Loading timeout: Please check your connection and try again');
+        setError('Loading timeout: Please check your connection and try again. Tap Retry to try again.');
       }
-    }, 10000); // 10 second timeout
-
-    async function fetchUser() {
-      // Small delay to ensure component is mounted
-      await new Promise(resolve => setTimeout(resolve, 100));
+    }, 30000); // 30 second timeout
+    // Small delay to ensure component is mounted
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+      console.log('[mobile] Starting to fetch user...', { retryCount });
       
+      let supabase;
       try {
-        console.log('[mobile] Starting to fetch user...');
-        
-        let supabase;
-        try {
-          supabase = getSupabaseClient();
-          console.log('[mobile] Supabase client created successfully');
-        } catch (configErr) {
-          console.error('[mobile] Failed to initialize Supabase client:', configErr);
-          if (isMounted) {
-            setLoading(false);
-            setError(`Configuration error: ${configErr.message}`);
-          }
-          return; // Exit early if config fails
-        }
-        
-        console.log('[mobile] Fetching user from database', { 
-          username: DEMO_USERNAME,
-          supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL 
-        });
-
-        const { data, error: dbError } = await supabase
-          .from('User')
-          .select('username, displayName')
-          .eq('username', DEMO_USERNAME)
-          .limit(1)
-          .maybeSingle();
-
-        if (dbError) {
-          console.error('[mobile] Database query failed', {
-            message: dbError.message,
-            code: dbError.code,
-            details: dbError.details,
-            hint: dbError.hint,
-          });
-          throw new Error(`Database error: ${dbError.message} (${dbError.code})`);
-        }
-
-        if (!data) {
-          console.warn('[mobile] User not found', { username: DEMO_USERNAME });
-          throw new Error(`User not found: ${DEMO_USERNAME}`);
-        }
-
-        console.log('[mobile] User found', { 
-          username: data.username, 
-          displayName: data.displayName 
-        });
-
+        supabase = getSupabaseClient();
+        console.log('[mobile] Supabase client created successfully');
+      } catch (configErr) {
+        console.error('[mobile] Failed to initialize Supabase client:', configErr);
         if (isMounted) {
-          setDisplayName(data.displayName);
-          setUsername(data.username);
-          setError(null);
-        }
-      } catch (err) {
-        console.error('[mobile] Failed to fetch user from database', err);
-        if (isMounted) {
-          // Format error message for display (remove newlines, truncate if too long)
-          let errorMessage = err.message || 'Unknown error occurred';
-          errorMessage = errorMessage.replace(/\n/g, ' ').substring(0, 200);
-          setError(errorMessage);
-        }
-      } finally {
-        if (isMounted) {
+          clearTimeout(timeoutId);
           setLoading(false);
+          setError(`Configuration error: ${configErr.message}`);
         }
+        return; // Exit early if config fails
+      }
+      
+      console.log('[mobile] Fetching user from database', { 
+        username: DEMO_USERNAME,
+        supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL 
+      });
+
+      const { data, error: dbError } = await supabase
+        .from('User')
+        .select('username, displayName')
+        .eq('username', DEMO_USERNAME)
+        .limit(1)
+        .maybeSingle();
+
+      if (dbError) {
+        console.error('[mobile] Database query failed', {
+          message: dbError.message,
+          code: dbError.code,
+          details: dbError.details,
+          hint: dbError.hint,
+        });
+        throw new Error(`Database error: ${dbError.message} (${dbError.code})`);
+      }
+
+      if (!data) {
+        console.warn('[mobile] User not found', { username: DEMO_USERNAME });
+        throw new Error(`User not found: ${DEMO_USERNAME}`);
+      }
+
+      console.log('[mobile] User found', { 
+        username: data.username, 
+        displayName: data.displayName 
+      });
+
+      if (isMounted) {
+        clearTimeout(timeoutId);
+        setDisplayName(data.displayName);
+        setUsername(data.username);
+        setError(null);
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('[mobile] Failed to fetch user from database', err);
+      if (isMounted) {
+        clearTimeout(timeoutId);
+        // Format error message for display (remove newlines, truncate if too long)
+        let errorMessage = err.message || 'Unknown error occurred';
+        errorMessage = errorMessage.replace(/\n/g, ' ').substring(0, 200);
+        setError(errorMessage);
+        setLoading(false);
       }
     }
+  };
 
+  useEffect(() => {
     fetchUser();
+  }, []);
 
-    return () => {
-      isMounted = false;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+  const handleRetry = () => {
+    setLoading(true);
+    setError(null);
+    fetchUser();
+  };
+
+  // Check authentication status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setIsAuthenticated(true);
+          setCurrentScreen('home');
+        }
+      } catch (err) {
+        console.error('Error checking auth:', err);
       }
     };
+    checkAuth();
   }, []);
+
+  // Navigation handler
+  const navigation = {
+    navigate: (screen, params) => {
+      setScreenParams(params || {});
+      if (screen === 'Home' || screen === 'home') {
+        setIsAuthenticated(true);
+        setCurrentScreen('home');
+      } else {
+        setCurrentScreen(screen);
+      }
+    },
+    goBack: () => {
+      if (currentScreen === 'emailAuth' || currentScreen === 'EmailAuth') {
+        setCurrentScreen('auth');
+      } else if (currentScreen === 'home') {
+        setIsAuthenticated(false);
+        setCurrentScreen('auth');
+      }
+    }
+  };
+
+  // Show AuthScreen first (if not authenticated)
+  if (!isAuthenticated && currentScreen === 'auth') {
+    return <AuthScreen navigation={navigation} />;
+  }
+
+  // Show EmailAuth (login/register form)
+  if (!isAuthenticated && (currentScreen === 'emailAuth' || currentScreen === 'EmailAuth')) {
+    return <EmailAuth navigation={navigation} route={{ params: screenParams }} />;
+  }
+
+  // If authenticated, show home
+  if (isAuthenticated || currentScreen === 'home') {
+    // Continue to show main app content below
+  }
 
   // Always render something - never return null
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
+      {isAuthenticated && (
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => {
+            setIsAuthenticated(false);
+            setCurrentScreen('auth');
+          }}>
+            <Text style={styles.backButton}>← Logout</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <Text style={styles.title}>openactive</Text>
       <Text style={styles.subtitle}>mobile</Text>
       {loading ? (
@@ -140,6 +207,9 @@ function AppContent() {
           <Text style={styles.fallback}>
             Showing fallback: {displayName}
           </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <>
@@ -213,6 +283,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#c7d2ff',
     textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: '#4a90e2',
+    borderRadius: 8,
+    minWidth: 120,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  header: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+  },
+  backButton: {
+    color: '#c7d2ff',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 

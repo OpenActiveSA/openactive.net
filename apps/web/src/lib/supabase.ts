@@ -43,11 +43,19 @@ export function getSupabaseClient(options?: {
       : process.env.SUPABASE_LOCAL_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   }
   // Priority 3: Environment variables
+  // For client-side, use NEXT_PUBLIC_ prefixed variables (they're available in browser)
+  // For server-side, use regular variables or NEXT_PUBLIC_ variables
   else {
-    supabaseUrl = process.env.SUPABASE_URL;
-    supabaseKey = options?.useServiceRole
-      ? process.env.SUPABASE_SERVICE_ROLE_KEY
-      : process.env.SUPABASE_ANON_KEY;
+    // Check NEXT_PUBLIC_ first (available in both client and server)
+    supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    
+    if (options?.useServiceRole) {
+      // Service role key should NOT be exposed to client - only use on server
+      supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      // Anon key can be public - use NEXT_PUBLIC_ version for client-side
+      supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    }
   }
 
   if (!supabaseUrl || !supabaseKey) {
@@ -68,7 +76,8 @@ export function getSupabaseClient(options?: {
     const mode = useLocal ? 'local' : 'remote';
     const keyType = options?.useServiceRole ? 'service role' : 'anon';
     console.log(`[Supabase] Mode: ${mode}, Key: ${keyType}`);
-    console.log(`[Supabase] URL: ${supabaseUrl.substring(0, 40)}...`);
+    console.log(`[Supabase] URL: ${supabaseUrl}`);
+    console.log(`[Supabase] Key exists: ${!!supabaseKey}`);
   }
 
   return createClient(supabaseUrl, supabaseKey, {

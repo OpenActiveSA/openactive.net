@@ -18,18 +18,18 @@ export const GET: RouteHandler = async (
   }
 
   const { username } = await Promise.resolve(context?.params);
-  const trimmedUsername = username?.trim();
+  const trimmedEmail = username?.trim(); // Using email passed as username parameter
 
-  if (!trimmedUsername) {
-    return NextResponse.json({ error: 'MISSING_USERNAME' }, { status: 400 });
+  if (!trimmedEmail || !trimmedEmail.includes('@')) {
+    return NextResponse.json({ error: 'MISSING_EMAIL' }, { status: 400 });
   }
 
-  console.log('[api/users] Fetching user', { username: trimmedUsername });
+  console.log('[api/users] Fetching user by email', { email: trimmedEmail });
 
   const { data, error } = await supabase
     .from('User')
-    .select('id, username, displayName, email, role')
-    .eq('username', trimmedUsername)
+    .select('id, Firstname, Surname, email, role')
+    .eq('email', trimmedUsername)
     .limit(1)
     .maybeSingle();
 
@@ -44,14 +44,15 @@ export const GET: RouteHandler = async (
   }
 
   if (!data) {
-    console.warn('[api/users] User not found', { username: trimmedUsername });
+    console.warn('[api/users] User not found', { email: trimmedEmail });
     return NextResponse.json({ error: 'USER_NOT_FOUND' }, { status: 404 });
   }
 
   console.log('[api/users] Returning user', {
     id: data.id,
-    username: data.username,
-    displayName: data.displayName,
+    email: data.email,
+    Firstname: data.Firstname,
+    Surname: data.Surname,
   });
 
   return NextResponse.json({ user: data });
