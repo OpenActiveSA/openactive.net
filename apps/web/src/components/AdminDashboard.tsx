@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
@@ -39,35 +39,38 @@ export function AdminDashboard() {
   const hasCheckedRole = useRef(false);
   const hasRedirected = useRef(false);
 
-  // Check user role and permissions
-  useEffect(() => {
-    // Don't do anything while auth is still loading
-    if (authLoading) {
-      return;
-    }
+  const loadDashboardData = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
 
-    // If already checked or redirected, don't check again
-    if (hasCheckedRole.current || hasRedirected.current) {
-      return;
-    }
+    try {
+      const supabase = getSupabaseClientClient();
 
-    // If no user, redirect to login
-    if (!user) {
-      if (!hasRedirected.current) {
-        hasRedirected.current = true;
-        router.push('/login');
+      // Load users
+      const { data: usersData, error: usersError } = await supabase
+        .from('User')
+        .select('id, email, Firstname, Surname, role, createdAt')
+        .order('createdAt', { ascending: false });
+
+      if (usersError) {
+        console.error('Error loading users:', usersError);
+        throw new Error('Failed to load users');
       }
-      return;
-    }
 
-    // Check role only once
-    if (!hasCheckedRole.current && user?.email && !hasRedirected.current) {
-      hasCheckedRole.current = true;
-      checkUserRole();
-    }
-  }, [user, authLoading]);
+      setUsers((usersData || []) as User[]);
 
-  const checkUserRole = async () => {
+      // For now, clubs table doesn't exist, so we'll leave it empty
+      // TODO: Add clubs table and query when available
+      setClubs([]);
+    } catch (err: any) {
+      console.error('Error loading dashboard data:', err);
+      setError(err.message || 'Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const checkUserRole = useCallback(async () => {
     if (!user?.email || hasRedirected.current) return;
 
     try {
@@ -102,38 +105,35 @@ export function AdminDashboard() {
       setError(err.message || 'Failed to verify permissions');
       setIsLoading(false);
     }
-  };
+  }, [user, router, loadDashboardData]);
 
-  const loadDashboardData = async () => {
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const supabase = getSupabaseClientClient();
-
-      // Load users
-      const { data: usersData, error: usersError } = await supabase
-        .from('User')
-        .select('id, email, Firstname, Surname, role, createdAt')
-        .order('createdAt', { ascending: false });
-
-      if (usersError) {
-        console.error('Error loading users:', usersError);
-        throw new Error('Failed to load users');
-      }
-
-      setUsers((usersData || []) as User[]);
-
-      // For now, clubs table doesn't exist, so we'll leave it empty
-      // TODO: Add clubs table and query when available
-      setClubs([]);
-    } catch (err: any) {
-      console.error('Error loading dashboard data:', err);
-      setError(err.message || 'Failed to load dashboard data');
-    } finally {
-      setIsLoading(false);
+  // Check user role and permissions
+  useEffect(() => {
+    // Don't do anything while auth is still loading
+    if (authLoading) {
+      return;
     }
-  };
+
+    // If already checked or redirected, don't check again
+    if (hasCheckedRole.current || hasRedirected.current) {
+      return;
+    }
+
+    // If no user, redirect to login
+    if (!user) {
+      if (!hasRedirected.current) {
+        hasRedirected.current = true;
+        router.push('/login');
+      }
+      return;
+    }
+
+    // Check role only once
+    if (!hasCheckedRole.current && user?.email && !hasRedirected.current) {
+      hasCheckedRole.current = true;
+      checkUserRole();
+    }
+  }, [user, authLoading, router, checkUserRole]);
 
   // Show loading while auth is being checked or authorization is being verified
   if (authLoading || !isAuthorized) {
