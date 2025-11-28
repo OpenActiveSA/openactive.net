@@ -218,8 +218,8 @@
 .backToLoginButton {
   width: 100%;
   padding: 14px;
-  background-color: #667eea;
-  color: #ffffff;
+  background-color: #ffffff;
+  color: #000000;
   border: none;
   border-radius: 4px;
   font-size: 16px;
@@ -230,7 +230,7 @@
 }
 
 .backToLoginButton:hover {
-  background-color: #7c8ef5;
+  background-color: #f0f0f0;
 }
 
 .forgotPassword {
@@ -252,8 +252,8 @@
 .submitButton {
   width: 100%;
   padding: 14px;
-  background-color: #667eea;
-  color: #ffffff;
+  background-color: #ffffff;
+  color: #000000;
   border: none;
   border-radius: 4px;
   font-size: 16px;
@@ -265,7 +265,7 @@
 }
 
 .submitButton:hover:not(:disabled) {
-  background-color: #7c8ef5;
+  background-color: #f0f0f0;
 }
 
 .submitButton:disabled {

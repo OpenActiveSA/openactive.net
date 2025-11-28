@@ -9,7 +9,7 @@ export async function GET() {
     
     // Test 1: Check if table exists
     const { data: tableData, error: tableError } = await supabase
-      .from('User')
+      .from('Users')
       .select('*')
       .limit(1);
     
@@ -30,7 +30,7 @@ export async function GET() {
     
     // Test 2: Check table structure
     const { data: userData, error: userError } = await supabase
-      .from('User')
+      .from('Users')
       .select('id, email, Firstname, Surname, name, surname, displayName')
       .limit(1)
       .maybeSingle();
@@ -50,7 +50,7 @@ export async function GET() {
     
     // Test 3: Count users
     const { count, error: countError } = await supabase
-      .from('User')
+      .from('Users')
       .select('*', { count: 'exact', head: true });
     
     return NextResponse.json({

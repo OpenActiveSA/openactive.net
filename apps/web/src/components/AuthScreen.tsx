@@ -50,7 +50,7 @@ export function AuthScreen() {
         {/* Logo */}
         <div className={styles.logoContainer}>
           <div className={styles.logo}>
-            <span className={styles.logoText}>O</span>
+            <img src="/open-logo.svg" alt="Open Active Logo" className={styles.logoImage} />
           </div>
         </div>
 
@@ -122,7 +122,7 @@ export function AuthScreen() {
             {/* Logo */}
             <div className={styles.logoContainer}>
               <div className={styles.logo}>
-                <span className={styles.logoText}>O</span>
+                <img src="/open-logo.svg" alt="Open Active Logo" className={styles.logoImage} />
               </div>
             </div>
 

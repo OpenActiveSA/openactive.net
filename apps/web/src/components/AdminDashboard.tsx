@@ -18,10 +18,9 @@ interface User {
 interface Club {
   id: string;
   name: string;
-  description?: string;
-  address?: string;
-  phone?: string;
-  email?: string;
+  numberOfCourts?: number;
+  country?: string;
+  province?: string;
   is_active?: boolean;
   createdAt?: string;
 }
@@ -48,7 +47,7 @@ export function AdminDashboard() {
 
       // Load users
       const { data: usersData, error: usersError } = await supabase
-        .from('User')
+        .from('Users')
         .select('id, email, Firstname, Surname, role, createdAt')
         .order('createdAt', { ascending: false });
 
@@ -59,9 +58,22 @@ export function AdminDashboard() {
 
       setUsers((usersData || []) as User[]);
 
-      // For now, clubs table doesn't exist, so we'll leave it empty
-      // TODO: Add clubs table and query when available
-      setClubs([]);
+      // Load clubs
+      const { data: clubsData, error: clubsError } = await supabase
+        .from('Clubs')
+        .select('id, name, numberOfCourts, country, province, is_active, createdAt')
+        .order('createdAt', { ascending: false });
+
+      if (clubsError) {
+        console.error('Error loading clubs:', clubsError);
+        // Don't throw error if table doesn't exist yet, just log it
+        if (clubsError.code !== '42P01') {
+          throw new Error('Failed to load clubs');
+        }
+        setClubs([]);
+      } else {
+        setClubs((clubsData || []) as Club[]);
+      }
     } catch (err: any) {
       console.error('Error loading dashboard data:', err);
       setError(err.message || 'Failed to load dashboard data');
@@ -76,7 +88,7 @@ export function AdminDashboard() {
     try {
       const supabase = getSupabaseClientClient();
       const { data, error } = await supabase
-        .from('User')
+        .from('Users')
         .select('role, Firstname, Surname')
         .eq('email', user.email)
         .eq('id', user.id)
@@ -372,28 +384,93 @@ function AllUsersTab({ users, onRefresh }: { users: User[]; onRefresh: () => voi
 
 function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => void }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [clubName, setClubName] = useState('');
+  const [numberOfCourts, setNumberOfCourts] = useState<number>(1);
+  const [country, setCountry] = useState('');
+  const [province, setProvince] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const supabase = getSupabaseClientClient();
 
-  const filteredClubs = clubs.filter(
-    (club) =>
-      club.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      club.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredClubs = clubs.filter((club) =>
+    club.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleAddClub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError('');
+
+    if (!clubName.trim()) {
+      setError('Club name is required');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (numberOfCourts < 1) {
+      setError('Number of courts must be at least 1');
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const { error: insertError } = await supabase
+        .from('Clubs')
+        .insert([
+          {
+            name: clubName.trim(),
+            numberOfCourts: numberOfCourts,
+            country: country.trim() || null,
+            province: province.trim() || null,
+            is_active: true,
+          },
+        ]);
+
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      // Reset form and close modal
+      setClubName('');
+      setNumberOfCourts(1);
+      setCountry('');
+      setProvince('');
+      setShowAddModal(false);
+      setError('');
+      onRefresh();
+    } catch (err: any) {
+      console.error('Error creating club:', err);
+      setError(err.message || 'Failed to create club');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className={styles.contentSection}>
       <div className={styles.sectionHeader}>
         <div>
           <h1>Clubs</h1>
-          <p className={styles.sectionSubtitle}>{clubs.length} tennis clubs registered</p>
+          <p className={styles.sectionSubtitle}>{clubs.length} {clubs.length === 1 ? 'club' : 'clubs'} registered</p>
         </div>
-        <button className={styles.btnPrimary} onClick={onRefresh}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-          Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button className={styles.btnPrimary} onClick={() => setShowAddModal(true)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add Club
+          </button>
+          <button className={styles.btnPrimary} onClick={onRefresh}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className={styles.toolbar}>
@@ -427,9 +504,113 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
                   </span>
                 )}
               </div>
-              <p className={styles.clubDescription}>{club.description || 'No description provided.'}</p>
+              <p className={styles.clubDescription}>
+                {club.numberOfCourts || 0} {club.numberOfCourts === 1 ? 'court' : 'courts'}
+              </p>
+              {(club.country || club.province) && (
+                <p className={styles.clubLocation} style={{ marginTop: '8px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.6)' }}>
+                  {[club.province, club.country].filter(Boolean).join(', ')}
+                </p>
+              )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Add Club Modal */}
+      {showAddModal && (
+        <div className={styles.modalOverlay} onClick={() => !isSubmitting && setShowAddModal(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2>Add New Club</h2>
+              <button
+                className={styles.modalCloseButton}
+                onClick={() => !isSubmitting && setShowAddModal(false)}
+                disabled={isSubmitting}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleAddClub} className={styles.modalForm}>
+              {error && <div className={styles.errorMessage}>{error}</div>}
+
+              <div className={styles.formGroup}>
+                <label htmlFor="clubName">Club Name</label>
+                <input
+                  id="clubName"
+                  type="text"
+                  value={clubName}
+                  onChange={(e) => setClubName(e.target.value)}
+                  placeholder="Enter club name"
+                  required
+                  disabled={isSubmitting}
+                  className={styles.formInput}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="numberOfCourts">Number of Courts</label>
+                <input
+                  id="numberOfCourts"
+                  type="number"
+                  min="1"
+                  value={numberOfCourts}
+                  onChange={(e) => setNumberOfCourts(parseInt(e.target.value) || 1)}
+                  required
+                  disabled={isSubmitting}
+                  className={styles.formInput}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="country">Country</label>
+                <input
+                  id="country"
+                  type="text"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  placeholder="Enter country"
+                  disabled={isSubmitting}
+                  className={styles.formInput}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="province">Province or State</label>
+                <input
+                  id="province"
+                  type="text"
+                  value={province}
+                  onChange={(e) => setProvince(e.target.value)}
+                  placeholder="Enter province or state"
+                  disabled={isSubmitting}
+                  className={styles.formInput}
+                />
+              </div>
+
+              <div className={styles.modalActions}>
+                <button
+                  type="button"
+                  className={styles.btnSecondary}
+                  onClick={() => setShowAddModal(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={styles.btnPrimary}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Club'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

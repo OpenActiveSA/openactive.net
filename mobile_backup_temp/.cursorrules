@@ -1,0 +1,24 @@
+# Cursor AI Rules for Mobile App Development
+
+## Build Monitoring
+- When user mentions "build" or "running the app", automatically check build status
+- If build fails, check logs in android/app/build/outputs/logs/ or run gradlew with --stacktrace
+- Monitor for common errors: disk space, Kotlin version, dependency resolution
+
+## Automatic Checks
+- Before suggesting to run build, check disk space (need at least 5GB free)
+- After build commands, verify APK was created at android/app/build/outputs/apk/debug/app-debug.apk
+- If build takes >10 minutes, check if it's stuck or failed
+
+## Error Detection
+- Look for "BUILD FAILED" in output
+- Check for "There is not enough space on the disk"
+- Watch for Kotlin version mismatches
+- Monitor for dependency resolution errors
+
+## SVG Testing
+- When build succeeds, remind user to test SVG functionality via test screen
+- Check if react-native-svg is properly linked in native build
+
+
+

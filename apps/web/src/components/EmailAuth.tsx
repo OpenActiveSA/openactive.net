@@ -44,9 +44,9 @@ export function EmailAuth() {
     try {
       console.log('[EmailAuth] Checking if user exists:', emailToCheck.toLowerCase().trim());
       
-      // Check if user exists in User table
+      // Check if user exists in Users table
       const { data, error } = await supabase
-        .from('User')
+        .from('Users')
         .select('email')
         .eq('email', emailToCheck.toLowerCase().trim())
         .maybeSingle();
@@ -122,10 +122,10 @@ export function EmailAuth() {
         }
 
         if (data.user) {
-          // Update last login in User table
+          // Update last login in Users table
           try {
             await supabase
-              .from('User')
+              .from('Users')
               .update({ lastLoginAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
               .eq('id', data.user.id.toString());
           } catch (err) {
@@ -136,7 +136,7 @@ export function EmailAuth() {
           // Check user role and redirect accordingly
           try {
             const { data: userData, error: roleError } = await supabase
-              .from('User')
+              .from('Users')
               .select('role')
               .eq('id', data.user.id)
               .eq('email', data.user.email)
@@ -181,10 +181,10 @@ export function EmailAuth() {
 
         if (data.user) {
           // Skip email confirmation for now - immediately redirect
-          // Update last login in User table
+          // Update last login in Users table
           try {
             await supabase
-              .from('User')
+              .from('Users')
               .update({ lastLoginAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
               .eq('id', data.user.id.toString());
           } catch (err) {
@@ -195,7 +195,7 @@ export function EmailAuth() {
           // Check user role and redirect accordingly
           try {
             const { data: userData, error: roleError } = await supabase
-              .from('User')
+              .from('Users')
               .select('role')
               .eq('id', data.user.id)
               .eq('email', data.user.email)

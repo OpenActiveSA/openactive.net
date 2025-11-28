@@ -32,14 +32,12 @@
     "node": ">=18.17"
   },
   "devDependencies": {
+    "expo-asset": "~11.0.5",
     "prisma": "^6.19.0",
     "supabase": "^2.58.5"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.0",
-    "expo": "~53.0.24",
-    "react": "19.0.0",
-    "react-native": "0.79.6"
+    "@prisma/client": "^6.19.0"
   },
   "prisma": {
     "seed": "node prisma/seed.mjs"

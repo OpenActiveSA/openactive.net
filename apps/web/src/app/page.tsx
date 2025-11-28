@@ -28,7 +28,7 @@ async function getDemoUser(): Promise<UserData | null> {
         
         // Query the table with Firstname and Surname columns, using email as identifier
         let { data, error } = await supabase
-          .from('User')
+          .from('Users')
           .select('email, Firstname, Surname, displayName')
           .eq('email', demoEmail)
           .limit(1)
@@ -38,7 +38,7 @@ async function getDemoUser(): Promise<UserData | null> {
         if (error && (error.message?.includes('column') || error.message?.includes('does not exist'))) {
           console.warn('[web] Trying alternative query without Firstname/Surname columns');
           const altQuery = await supabase
-            .from('User')
+            .from('Users')
             .select('email')
             .eq('email', demoEmail)
             .limit(1)

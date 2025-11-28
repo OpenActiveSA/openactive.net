@@ -27,9 +27,9 @@ export const GET: RouteHandler = async (
   console.log('[api/users] Fetching user by email', { email: trimmedEmail });
 
   const { data, error } = await supabase
-    .from('User')
+    .from('Users')
     .select('id, Firstname, Surname, email, role')
-    .eq('email', trimmedUsername)
+    .eq('email', trimmedEmail)
     .limit(1)
     .maybeSingle();
 
