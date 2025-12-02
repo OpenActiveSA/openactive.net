@@ -1,218 +1,184 @@
-import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { getSupabaseClient } from './lib/supabase';
-
-const DEMO_USERNAME = process.env.EXPO_PUBLIC_DEMO_USERNAME ?? 'demo.user';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView } from 'react-native';
 
 export default function App() {
-  const [displayName, setDisplayName] = useState('OpenActive Demo');
-  const [username, setUsername] = useState('demo.user');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const handleGooglePress = () => {
+    Alert.alert('Coming Soon', 'Google sign-in will be available soon');
+  };
 
-  console.log('[mobile] App component rendered', { loading, error, displayName });
+  const handleFacebookPress = () => {
+    Alert.alert('Coming Soon', 'Facebook sign-in will be available soon');
+  };
 
-  useEffect(() => {
-    console.log('[mobile] useEffect triggered');
-    let isMounted = true;
-
-    async function fetchUser() {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        console.log('[mobile] Starting fetchUser');
-        
-        const supabase = getSupabaseClient();
-        
-        console.log('[mobile] Supabase client created', { 
-          username: DEMO_USERNAME,
-          hasUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL 
-        });
-
-        // Add timeout to prevent infinite loading (reduced to 5 seconds)
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => {
-            console.error('[mobile] Request timeout');
-            reject(new Error('Request timeout after 5 seconds'));
-          }, 5000)
-        );
-
-        const queryPromise = supabase
-          .from('User')
-          .select('username, displayName')
-          .eq('username', DEMO_USERNAME)
-          .limit(1)
-          .maybeSingle();
-
-        console.log('[mobile] Query started, waiting for response...');
-        const { data, error: dbError } = await Promise.race([queryPromise, timeoutPromise]);
-        console.log('[mobile] Query completed', { hasData: !!data, hasError: !!dbError });
-
-        if (dbError) {
-          console.error('[mobile] Database query failed', dbError);
-          throw new Error(`Database error: ${dbError.message}`);
-        }
-
-        if (!data) {
-          console.warn('[mobile] User not found', { username: DEMO_USERNAME });
-          // Don't throw error for missing user, just show fallback
-          if (isMounted) {
-            setLoading(false);
-            setError(null);
-          }
-          return;
-        }
-
-        console.log('[mobile] User found', { 
-          username: data.username, 
-          displayName: data.displayName 
-        });
-
-        if (isMounted) {
-          setDisplayName(data.displayName);
-          setUsername(data.username);
-          setError(null);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error('[mobile] Failed to fetch user from database', err);
-        if (isMounted) {
-          const errorMessage = err.message || 'Unknown error occurred';
-          console.error('[mobile] Setting error state', errorMessage);
-          setError(errorMessage);
-          setLoading(false);
-        }
-      } finally {
-        console.log('[mobile] fetchUser completed, isMounted:', isMounted);
-      }
-    }
-
-    console.log('[mobile] Calling fetchUser');
-    fetchUser();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const handleEmailPress = () => {
+    Alert.alert('Coming Soon', 'Email sign-in will be available soon');
+  };
 
   return (
-    <View style={styles.container}>
+    <ScrollView 
+      contentContainerStyle={styles.scrollContent}
+      style={styles.container}
+    >
       <StatusBar style="light" />
-      <Text style={styles.title}>openactive</Text>
-      <Text style={styles.subtitle}>mobile</Text>
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#c7d2ff" />
-          <Text style={styles.loadingText}>Loading...</Text>
+      <View style={styles.content}>
+        {/* No Logo - as requested */}
+
+        {/* Title */}
+        <Text style={styles.title}>Log in or sign up</Text>
+        <Text style={styles.subtitle}>Your game starts here</Text>
+
+        {/* Google Button */}
+        <TouchableOpacity 
+          style={styles.socialButton}
+          onPress={handleGooglePress}
+          activeOpacity={0.8}
+        >
+          <View style={styles.googleIcon}>
+            <Text style={styles.googleIconText}>G</Text>
+          </View>
+          <Text style={styles.socialButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
+
+        {/* Facebook Button */}
+        <TouchableOpacity 
+          style={styles.socialButton}
+          onPress={handleFacebookPress}
+          activeOpacity={0.8}
+        >
+          <View style={styles.facebookIcon}>
+            <Text style={styles.facebookIconText}>f</Text>
+          </View>
+          <Text style={styles.socialButtonText}>Continue with Facebook</Text>
+        </TouchableOpacity>
+
+        {/* Separator */}
+        <View style={styles.separator}>
+          <Text style={styles.separatorText}>or</Text>
         </View>
-      ) : error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>⚠️ Error</Text>
-          <Text style={styles.error}>{error}</Text>
-          <Text style={styles.errorHint}>
-            Check console logs for details
-          </Text>
-          <View style={styles.divider} />
-          <Text style={styles.fallback}>
-            Showing fallback data:
-          </Text>
-          <Text style={styles.displayName}>{displayName}</Text>
-          <Text style={styles.username}>@{username}</Text>
-        </View>
-      ) : (
-        <View style={styles.contentContainer}>
-          <Text style={styles.displayName}>{displayName}</Text>
-          <Text style={styles.username}>@{username}</Text>
-        </View>
-      )}
-    </View>
+
+        {/* Email Button */}
+        <TouchableOpacity 
+          style={styles.socialButton}
+          onPress={handleEmailPress}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.emailIcon}>✉</Text>
+          <Text style={styles.socialButtonText}>Continue with email</Text>
+        </TouchableOpacity>
+
+        {/* Terms */}
+        <Text style={styles.termsText}>
+          By registering you are accepting our{' '}
+          <Text style={styles.linkText}>terms of use</Text>
+          {' '}and{' '}
+          <Text style={styles.linkText}>privacy policy</Text>
+        </Text>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a1f44',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
+    backgroundColor: '#052333',
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  content: {
+    flex: 1,
+    paddingTop: 80,
+    paddingBottom: 40,
     paddingHorizontal: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    maxWidth: 480,
+    width: '100%',
+    alignSelf: 'center',
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#f5f7ff',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
+    fontSize: 28,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 20,
-    color: '#c7d2ff',
-    letterSpacing: 4,
-    textTransform: 'uppercase',
-  },
-  contentContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  displayName: {
-    marginTop: 8,
-    fontSize: 20,
-    color: '#f5f7ff',
-  },
-  username: {
-    marginTop: 4,
     fontSize: 16,
-    color: '#c7d2ff',
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: 8,
+    marginBottom: 64,
+    textAlign: 'center',
   },
-  errorContainer: {
-    marginTop: 20,
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 4,
     padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    width: '100%',
+  },
+  googleIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4285F4',
+    justifyContent: 'center',
     alignItems: 'center',
-    maxWidth: '90%',
+    marginRight: 12,
   },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ff6b6b',
-    marginBottom: 8,
-  },
-  error: {
+  googleIconText: {
+    color: '#ffffff',
     fontSize: 14,
-    color: '#ffb4ab',
-    textAlign: 'center',
-    marginBottom: 8,
+    fontWeight: 'bold',
   },
-  errorHint: {
-    fontSize: 12,
-    color: '#c7d2ff',
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  fallback: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#c7d2ff',
-    textAlign: 'center',
-  },
-  divider: {
-    width: '80%',
-    height: 1,
-    backgroundColor: '#c7d2ff',
-    marginVertical: 16,
-    opacity: 0.3,
-  },
-  loadingContainer: {
-    marginTop: 20,
+  facebookIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#1877F2',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    marginRight: 12,
   },
-  loadingText: {
+  facebookIconText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  emailIcon: {
+    fontSize: 20,
+    marginRight: 12,
+    color: 'rgba(0, 0, 0, 0.7)',
+  },
+  socialButtonText: {
     fontSize: 16,
-    color: '#c7d2ff',
-    marginTop: 8,
+    color: '#000000',
+  },
+  separator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+    width: '100%',
+  },
+  separatorText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  termsText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 20,
+    marginTop: 20,
+  },
+  linkText: {
+    color: '#667eea',
+    textDecorationLine: 'underline',
   },
 });
