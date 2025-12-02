@@ -8,27 +8,47 @@ const DEMO_USERNAME = process.env.EXPO_PUBLIC_DEMO_USERNAME ?? 'demo.user';
 export default function App() {
   const [displayName, setDisplayName] = useState('OpenActive Demo');
   const [username, setUsername] = useState('demo.user');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  console.log('[mobile] App component rendered', { loading, error, displayName });
+
   useEffect(() => {
+    console.log('[mobile] useEffect triggered');
     let isMounted = true;
 
     async function fetchUser() {
       try {
+        setLoading(true);
+        setError(null);
+        
+        console.log('[mobile] Starting fetchUser');
+        
         const supabase = getSupabaseClient();
         
-        console.log('[mobile] Fetching user from database', { 
+        console.log('[mobile] Supabase client created', { 
           username: DEMO_USERNAME,
-          supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL 
+          hasUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL 
         });
 
-        const { data, error: dbError } = await supabase
+        // Add timeout to prevent infinite loading (reduced to 5 seconds)
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => {
+            console.error('[mobile] Request timeout');
+            reject(new Error('Request timeout after 5 seconds'));
+          }, 5000)
+        );
+
+        const queryPromise = supabase
           .from('User')
           .select('username, displayName')
           .eq('username', DEMO_USERNAME)
           .limit(1)
           .maybeSingle();
+
+        console.log('[mobile] Query started, waiting for response...');
+        const { data, error: dbError } = await Promise.race([queryPromise, timeoutPromise]);
+        console.log('[mobile] Query completed', { hasData: !!data, hasError: !!dbError });
 
         if (dbError) {
           console.error('[mobile] Database query failed', dbError);
@@ -37,7 +57,12 @@ export default function App() {
 
         if (!data) {
           console.warn('[mobile] User not found', { username: DEMO_USERNAME });
-          throw new Error(`User not found: ${DEMO_USERNAME}`);
+          // Don't throw error for missing user, just show fallback
+          if (isMounted) {
+            setLoading(false);
+            setError(null);
+          }
+          return;
         }
 
         console.log('[mobile] User found', { 
@@ -49,16 +74,22 @@ export default function App() {
           setDisplayName(data.displayName);
           setUsername(data.username);
           setError(null);
+          setLoading(false);
         }
       } catch (err) {
         console.error('[mobile] Failed to fetch user from database', err);
         if (isMounted) {
           const errorMessage = err.message || 'Unknown error occurred';
+          console.error('[mobile] Setting error state', errorMessage);
           setError(errorMessage);
+          setLoading(false);
         }
+      } finally {
+        console.log('[mobile] fetchUser completed, isMounted:', isMounted);
       }
     }
 
+    console.log('[mobile] Calling fetchUser');
     fetchUser();
 
     return () => {
@@ -71,7 +102,12 @@ export default function App() {
       <StatusBar style="light" />
       <Text style={styles.title}>openactive</Text>
       <Text style={styles.subtitle}>mobile</Text>
-      {error ? (
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#c7d2ff" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      ) : error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorTitle}>⚠️ Error</Text>
           <Text style={styles.error}>{error}</Text>
@@ -168,5 +204,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#c7d2ff',
     marginVertical: 16,
     opacity: 0.3,
+  },
+  loadingContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#c7d2ff',
+    marginTop: 8,
   },
 });
