@@ -13,10 +13,10 @@
     "@supabase/supabase-js": "^2.86.0",
     "expo": "52.0.47",
     "expo-asset": "~11.0.5",
-    "expo-status-bar": "~3.0.8",
-    "react": "18.2.0",
+    "expo-status-bar": "~2.0.1",
+    "react": "18.3.1",
     "react-dom": "^18.3.1",
-    "react-native": "0.76.5",
+    "react-native": "0.76.9",
     "react-native-web": "^0.19.13"
   },
   "private": true
