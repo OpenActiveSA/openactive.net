@@ -25,7 +25,18 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            {
+              "path": "./assets/fonts/openactive.ttf",
+              "family": "openactive"
+            }
+          ]
+        }
+      ]
     ]
   }
 }

@@ -1,18 +1,17 @@
 @import "tailwindcss";
 
-/* IcoMoon Font */
+/* OpenActive Font */
 @font-face {
-  font-family: 'icomoon';
-  src: url('/fonts/icomoon.woff') format('woff'),
-       url('/fonts/icomoon.ttf') format('truetype');
+  font-family: 'openactive';
+  src: url('/fonts/openactive.woff2') format('woff2'),
+       url('/fonts/openactive.woff') format('woff');
   font-weight: normal;
   font-style: normal;
   font-display: block;
 }
 
-[class^="icon-"], [class*=" icon-"] {
-  font-family: 'icomoon' !important;
-  speak: never;
+.oa, [class^="oa-"], [class*=" oa-"] {
+  font-family: 'openactive' !important;
   font-style: normal;
   font-weight: normal;
   font-variant: normal;
@@ -23,24 +22,20 @@
   display: inline-block;
 }
 
-.icon-home3:before {
-  content: "\e902";
+.oa-open-p:before {
+  content: "\f001";
   display: inline-block;
 }
-.icon-droplet:before {
-  content: "\e90b";
+.oa-open-o:before {
+  content: "\f002";
   display: inline-block;
 }
-.icon-paint-format:before {
-  content: "\e90c";
+.oa-open-n:before {
+  content: "\f003";
   display: inline-block;
 }
-.icon-play:before {
-  content: "\e912";
-  display: inline-block;
-}
-.icon-spades:before {
-  content: "\e917";
+.oa-open-e:before {
+  content: "\f004";
   display: inline-block;
 }
 
