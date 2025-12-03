@@ -26,6 +26,25 @@
   margin-bottom: 40px;
 }
 
+.iconRow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.iconRowItem {
+  font-size: 32px;
+  color: #ffffff;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.iconRowItem:hover {
+  opacity: 1;
+}
+
 .logo {
   width: 180px;
   height: 180px;

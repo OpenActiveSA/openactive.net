@@ -1,5 +1,49 @@
 @import "tailwindcss";
 
+/* IcoMoon Font */
+@font-face {
+  font-family: 'icomoon';
+  src: url('/fonts/icomoon.woff') format('woff'),
+       url('/fonts/icomoon.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+[class^="icon-"], [class*=" icon-"] {
+  font-family: 'icomoon' !important;
+  speak: never;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: inline-block;
+}
+
+.icon-home3:before {
+  content: "\e902";
+  display: inline-block;
+}
+.icon-droplet:before {
+  content: "\e90b";
+  display: inline-block;
+}
+.icon-paint-format:before {
+  content: "\e90c";
+  display: inline-block;
+}
+.icon-play:before {
+  content: "\e912";
+  display: inline-block;
+}
+.icon-spades:before {
+  content: "\e917";
+  display: inline-block;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

@@ -8,10 +8,17 @@ export default function Home() {
     <div className={styles.container} style={{ position: 'relative' }}>
       <BurgerMenu />
       <div className={styles.content}>
-        {/* No Logo - as requested */}
+        {/* IcoMoon Icons */}
+        <div className={styles.iconRow}>
+          <i className="icon-home3" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+          <i className="icon-droplet" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+          <i className="icon-paint-format" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+          <i className="icon-play" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+          <i className="icon-spades" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+        </div>
 
         {/* Title */}
-        <h1 className={styles.title}>Log in or sign up</h1>
+        <h1 className={styles.title}>Log 2 in or sign up</h1>
         <p className={styles.subtitle}>Your game starts here</p>
 
         {/* Google Button */}

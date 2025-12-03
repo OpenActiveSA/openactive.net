@@ -47,15 +47,17 @@ export function AuthScreen() {
     <div className={styles.container}>
       {!showEmailModal && (
         <div className={styles.content}>
-        {/* Logo */}
-        <div className={styles.logoContainer}>
-          <div className={styles.logo}>
-            <img src="/open-logo.svg" alt="Open Active Logo" className={styles.logoImage} />
-          </div>
+        {/* IcoMoon Icons */}
+        <div className={styles.iconRow}>
+          <i className="icon-home3" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+          <i className="icon-droplet" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+          <i className="icon-paint-format" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+          <i className="icon-play" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+          <i className="icon-spades" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
         </div>
 
         {/* Title */}
-        <h1 className={styles.title}>Log in or sign up</h1>
+        <h1 className={styles.title}>Log 2 in or sign up</h1> {/* Force refresh */}
         <p className={styles.subtitle}>Your game starts here</p>
 
         {/* Google Button */}
@@ -119,11 +121,13 @@ export function AuthScreen() {
               ← Back
             </button>
 
-            {/* Logo */}
-            <div className={styles.logoContainer}>
-              <div className={styles.logo}>
-                <img src="/open-logo.svg" alt="Open Active Logo" className={styles.logoImage} />
-              </div>
+            {/* IcoMoon Icons */}
+            <div className={styles.iconRow}>
+              <i className="icon-home3" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+              <i className="icon-droplet" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+              <i className="icon-paint-format" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+              <i className="icon-play" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
+              <i className="icon-spades" style={{ fontSize: '32px', color: '#ffffff', opacity: 0.8, display: 'inline-block' }}></i>
             </div>
 
             {/* Title */}
