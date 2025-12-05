@@ -1,44 +1,71 @@
-'use client';
-
 import { use } from 'react';
+import { getSupabaseServerClient } from '@/lib/supabase';
+import { generateSlug } from '@/lib/slug-utils';
+import ClubPageClient from './ClubPageClient';
 
 interface ClubPageProps {
   params: Promise<{ slug: string }>;
 }
 
-export default function ClubPage({ params }: ClubPageProps) {
-  const { slug } = use(params);
+interface Club {
+  id: string;
+  name: string;
+  backgroundColor?: string;
+  fontColor?: string;
+}
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#052333',
-      color: '#ffffff',
-      padding: '40px 20px',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}>
-      <h1 style={{
-        fontSize: '32px',
-        marginBottom: '16px',
-        fontWeight: '600',
-        textTransform: 'capitalize',
-        wordBreak: 'break-word',
-        textAlign: 'center'
-      }}>
-        {slug.replace(/([A-Z])/g, ' $1').trim()}
-      </h1>
-      <p style={{
-        fontSize: '16px',
-        opacity: 0.7,
-        textAlign: 'center',
-        marginTop: '8px'
-      }}>
-        Club page coming soon
-      </p>
-    </div>
-  );
+export default async function ClubPage({ params }: ClubPageProps) {
+  const { slug } = await params;
+  
+  let club: Club | null = null;
+  let backgroundColor = '#052333';
+  let fontColor = '#ffffff';
+
+  try {
+    const supabase = getSupabaseServerClient();
+    
+    // Try to fetch with all columns first, if that fails, try without branding columns
+    let clubsData, error;
+    
+    // First attempt: with all columns including branding
+    const result = await supabase
+      .from('Clubs')
+      .select('id, name, backgroundColor, fontColor')
+      .eq('is_active', true);
+    
+    clubsData = result.data;
+    error = result.error;
+
+    // If error and it's about missing columns, try without branding
+    if (error && (error.code === '42703' || error.message?.includes('column'))) {
+      const fallbackResult = await supabase
+        .from('Clubs')
+        .select('id, name')
+        .eq('is_active', true);
+      
+      clubsData = fallbackResult.data;
+      error = fallbackResult.error;
+    }
+
+    if (!error && clubsData) {
+      const foundClub = clubsData.find(
+        (c) => generateSlug(c.name) === slug
+      );
+
+      if (foundClub) {
+        club = foundClub as Club;
+        backgroundColor = (club.backgroundColor && club.backgroundColor.trim() !== '') 
+          ? club.backgroundColor 
+          : '#052333';
+        fontColor = (club.fontColor && club.fontColor.trim() !== '') 
+          ? club.fontColor 
+          : '#ffffff';
+      }
+    }
+  } catch (err) {
+    console.error('Error loading club:', err);
+  }
+
+  return <ClubPageClient club={club} slug={slug} backgroundColor={backgroundColor} fontColor={fontColor} />;
 }
 

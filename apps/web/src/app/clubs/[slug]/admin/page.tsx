@@ -19,6 +19,7 @@ interface Club {
   country?: string;
   province?: string;
   is_active?: boolean;
+  backgroundColor?: string;
   createdAt?: string;
 }
 
@@ -57,16 +58,39 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
     try {
       const supabase = getSupabaseClientClient();
 
-      // EXACT copy of main admin dashboard query
-      const { data: clubsData, error: clubsError } = await supabase
+      // Try to fetch with all columns first, if that fails, try without branding columns
+      let clubsData, clubsError;
+      
+      // First attempt: with all columns including branding
+      const result = await supabase
         .from('Clubs')
-        .select('id, name, numberOfCourts, country, province, is_active, createdAt')
+        .select('id, name, numberOfCourts, country, province, is_active, backgroundColor, createdAt')
         .order('createdAt', { ascending: false });
+      
+      clubsData = result.data;
+      clubsError = result.error;
 
+      // If error and it's about missing columns, try without branding
+      if (clubsError && (clubsError.code === '42703' || clubsError.message?.includes('column'))) {
+        console.warn('Background color column may not exist, trying without it:', clubsError);
+        const fallbackResult = await supabase
+          .from('Clubs')
+          .select('id, name, numberOfCourts, country, province, is_active, createdAt')
+          .order('createdAt', { ascending: false });
+        
+        clubsData = fallbackResult.data;
+        clubsError = fallbackResult.error;
+      }
 
       if (clubsError) {
-        console.error('Clubs fetch error:', clubsError);
-        setError(`Database error: ${clubsError.message}. Code: ${clubsError.code}`);
+        console.error('Clubs fetch error:', {
+          message: clubsError.message,
+          code: clubsError.code,
+          details: clubsError.details,
+          hint: clubsError.hint,
+          error: clubsError
+        });
+        setError(`Database error: ${clubsError.message || 'Unknown error'}. Code: ${clubsError.code || 'N/A'}`);
         setIsLoading(false);
         return;
       }
