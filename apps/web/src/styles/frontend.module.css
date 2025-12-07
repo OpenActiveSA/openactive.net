@@ -95,6 +95,13 @@
   justify-content: center;
 }
 
+.courtCard {
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  transition: all 0.2s;
+}
+
 .courtButton {
   padding: 6px 12px;
   font-size: 15px;
@@ -119,6 +126,36 @@
 }
 
 .courtButtonSelected {
+  background-color: var(--selected-color, #667eea);
+  border-color: var(--selected-color, #667eea);
+  color: #ffffff;
+}
+
+/* Duration Selection */
+.durationButton {
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  text-align: center;
+  min-width: 60px;
+}
+
+.durationButton:hover {
+  background-color: var(--hover-color, rgba(255, 255, 255, 0.2));
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.durationButtonSelected {
   background-color: var(--selected-color, #667eea);
   border-color: var(--selected-color, #667eea);
   color: #ffffff;

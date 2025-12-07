@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import ClubHeader from './ClubHeader';
 import ClubFooter from './ClubFooter';
 import styles from '@/styles/frontend.module.css';
@@ -24,18 +25,25 @@ interface ClubPageClientProps {
   openingTime: string;
   closingTime: string;
   bookingSlotInterval: number;
+  sessionDuration: number[];
 }
 
-export default function ClubPageClient({ club, slug, logo, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval }: ClubPageClientProps) {
+export default function ClubPageClient({ club, slug, logo, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration }: ClubPageClientProps) {
+  const router = useRouter();
   const displayName = club?.name || slug.replace(/([A-Z])/g, ' $1').trim();
   const numberOfCourts = club?.numberOfCourts || 1;
+  
+  // Ensure sessionDuration always has a default value
+  const validSessionDuration = (sessionDuration && Array.isArray(sessionDuration) && sessionDuration.length > 0) ? sessionDuration : [60];
   
   console.log('ClubPageClient received props:', { 
     hoverColor, 
     bookingSlotInterval, 
     openingTime, 
     closingTime,
-    selectedColor 
+    selectedColor,
+    sessionDuration,
+    validSessionDuration
   });
   
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -45,6 +53,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
   
   const [selectedCourt, setSelectedCourt] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
   const [dateScrollIndex, setDateScrollIndex] = useState<number>(0);
 
   // Generate time slots based on club settings
@@ -119,6 +128,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
     setSelectedDate(dateString);
     setSelectedCourt(null);
     setSelectedTime(null);
+    setSelectedDuration(null);
   };
 
   const handleBooking = () => {
@@ -264,61 +274,82 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
         <div className={styles.courtSelection}>
           <div className={styles.courtButtonsGrid}>
             {courts.map((courtNum) => (
-              <button
-                key={courtNum}
-                onClick={() => {
-                  setSelectedCourt(courtNum);
-                }}
-                className={`${styles.courtButton} ${selectedCourt === courtNum ? styles.courtButtonSelected : ''}`}
+              <div 
+                key={courtNum} 
+                className={styles.courtCard}
                 style={{
-                  backgroundColor: selectedCourt === courtNum ? selectedColor : '#ffffff',
-                  borderColor: selectedCourt === courtNum ? selectedColor : undefined,
-                  color: selectedCourt === courtNum ? '#ffffff' : undefined
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedCourt !== courtNum) {
-                    e.currentTarget.style.backgroundColor = hoverColor;
-                    e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
-                    e.currentTarget.style.color = '#ffffff';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedCourt !== courtNum) {
-                    e.currentTarget.style.backgroundColor = '#ffffff';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                    e.currentTarget.style.color = '#052333';
-                  }
+                  backgroundColor: '#ffffff',
+                  border: 'none',
+                  borderRadius: '3px',
+                  padding: '16px'
                 }}
               >
-                Court {courtNum}
-              </button>
+                <div
+                  className={styles.courtButton}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    color: '#052333',
+                    width: '100%',
+                    cursor: 'default'
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontWeight: '500' }}>Court {courtNum}</span>
+                  </div>
+                </div>
+                
+                {/* Duration Selection - Always visible for all courts */}
+                {validSessionDuration && validSessionDuration.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+                      {validSessionDuration.map((duration) => (
+                        <button
+                          key={duration}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Always navigate to player selection with booking details
+                            const params = new URLSearchParams({
+                              court: courtNum.toString(),
+                              date: selectedDate,
+                              duration: duration.toString()
+                            });
+                            // Add time if selected
+                            if (selectedTime) {
+                              params.set('time', selectedTime);
+                            }
+                            router.push(`/club/${slug}/players?${params.toString()}`);
+                          }}
+                          className={`${styles.durationButton} ${selectedCourt === courtNum && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
+                          style={{
+                            backgroundColor: selectedCourt === courtNum && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.1)',
+                            borderColor: selectedCourt === courtNum && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.2)',
+                            color: selectedCourt === courtNum && selectedDuration === duration ? '#ffffff' : '#052333'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!(selectedCourt === courtNum && selectedDuration === duration)) {
+                              e.currentTarget.style.backgroundColor = hoverColor;
+                              e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.3)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!(selectedCourt === courtNum && selectedDuration === duration)) {
+                              e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.1)';
+                              e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.2)';
+                            }
+                          }}
+                        >
+                          {duration}min
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>
-
-        {/* Book Button */}
-        {selectedCourt && selectedTime && (
-          <div className={styles.bookButtonContainer}>
-            <button
-              onClick={handleBooking}
-              className={styles.bookButton}
-              style={{
-                backgroundColor: fontColor,
-                color: backgroundColor
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = '0.9';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = '1';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              Book Court {selectedCourt} at {selectedTime}
-            </button>
-          </div>
-        )}
       </div>
       <ClubFooter fontColor={fontColor} />
     </div>

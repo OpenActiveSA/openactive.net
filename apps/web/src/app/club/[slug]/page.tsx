@@ -19,6 +19,7 @@ interface Club {
   openingTime?: string;
   closingTime?: string;
   bookingSlotInterval?: number;
+  sessionDuration?: number[];
 }
 
 export default async function ClubPage({ params }: ClubPageProps) {
@@ -40,7 +41,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     // Get all active clubs and find by slug
     const result = await supabase
       .from('Clubs')
-      .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, numberOfCourts, openingTime, closingTime, bookingSlotInterval')
+      .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, numberOfCourts, openingTime, closingTime, bookingSlotInterval, sessionDuration')
       .eq('is_active', true);
     
     clubData = result.data;
@@ -50,7 +51,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     if (error && (error.code === '42703' || error.message?.includes('column'))) {
       const fallbackResult = await supabase
         .from('Clubs')
-        .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, numberOfCourts, openingTime, closingTime, bookingSlotInterval')
+        .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, numberOfCourts, openingTime, closingTime, bookingSlotInterval, sessionDuration')
         .eq('is_active', true);
       
       clubData = fallbackResult.data;
@@ -105,12 +106,34 @@ export default async function ClubPage({ params }: ClubPageProps) {
     }
   }
   
+  // Parse sessionDuration (JSONB array)
+  let sessionDuration: number[] = [60]; // default
+  const durationValue = (club as any)?.sessionDuration;
+  if (durationValue !== null && durationValue !== undefined) {
+    if (Array.isArray(durationValue)) {
+      sessionDuration = durationValue;
+    } else if (typeof durationValue === 'string') {
+      try {
+        const parsed = JSON.parse(durationValue);
+        sessionDuration = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        const parsed = parseInt(String(durationValue), 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          sessionDuration = [parsed];
+        }
+      }
+    } else if (typeof durationValue === 'number') {
+      sessionDuration = [durationValue];
+    }
+  }
+  
   console.log('Club page props:', { 
     clubId: club?.id, 
     clubName: club?.name,
     openingTime, 
     closingTime, 
     bookingSlotInterval,
+    sessionDuration,
     rawInterval: (club as any)?.bookingSlotInterval,
     rawClub: club
   });
@@ -126,6 +149,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     openingTime={openingTime}
     closingTime={closingTime}
     bookingSlotInterval={bookingSlotInterval}
+    sessionDuration={sessionDuration}
   />;
 }
 

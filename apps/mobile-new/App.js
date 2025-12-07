@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView, Animated, TextInput, Image } from 'react-native';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView, Animated, TextInput, Image, Modal, FlatList } from 'react-native';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { Image as ExpoImage } from 'expo-image';
@@ -71,12 +71,21 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userName, setUserName] = useState('');
   const [showBurgerMenu, setShowBurgerMenu] = useState(false);
+  const [showPlayerSelection, setShowPlayerSelection] = useState(false);
+  const [bookingDetails, setBookingDetails] = useState(null);
+  const [bookingType, setBookingType] = useState('singles'); // 'singles', 'doubles', 'coaching'
+  const [selectedPlayers, setSelectedPlayers] = useState([null, null, null, null]);
+  const [playerSearchTerm, setPlayerSearchTerm] = useState('');
+  const [showPlayerDropdown, setShowPlayerDropdown] = useState(null);
+  const [availablePlayers, setAvailablePlayers] = useState([]);
+  const [coaches, setCoaches] = useState([]);
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
   const [selectedCourt, setSelectedCourt] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
+  const [selectedDuration, setSelectedDuration] = useState(null);
   const [dateScrollIndex, setDateScrollIndex] = useState(0);
   
   // Animated values for each letter (O, P, E, N) - start at 30% opacity
@@ -356,7 +365,7 @@ export default function App() {
       if (!error && clubsData && clubsData.length > 0) {
         result = await supabase
           .from('Clubs')
-          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval')
+          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
           .order('name', { ascending: true });
         
         if (!result.error && result.data) {
@@ -371,7 +380,7 @@ export default function App() {
       if (!error && clubsData && clubsData.length > 0) {
         result = await supabase
           .from('Clubs')
-          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval')
+          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
           .eq('is_active', true)
           .order('name', { ascending: true });
         
@@ -722,6 +731,841 @@ export default function App() {
     setSelectedClub(null);
   };
 
+  // Load available players when player selection screen is shown
+  useEffect(() => {
+    const loadPlayers = async () => {
+      if (!showPlayerSelection || !selectedClub?.id) return;
+      try {
+        const supabase = getSupabaseClient();
+        const { data } = await supabase
+          .from('Users')
+          .select('id, Firstname, Surname, email')
+          .order('Firstname', { ascending: true })
+          .limit(100);
+        
+        if (data) {
+          const players = data.map(u => ({
+            id: u.id,
+            name: u.Firstname && u.Surname 
+              ? `${u.Firstname} ${u.Surname}`
+              : u.Firstname || u.Surname || u.email?.split('@')[0] || 'User',
+            email: u.email || ''
+          }));
+          setAvailablePlayers(players);
+          // For now, all users can be coaches. Later you can filter by role if needed
+          setCoaches(players);
+        }
+      } catch (err) {
+        console.error('Error loading players:', err);
+      }
+    };
+    
+    loadPlayers();
+  }, [showPlayerSelection, selectedClub?.id]);
+  
+  // Set current user as first player when player selection opens
+  useEffect(() => {
+    if (showPlayerSelection && currentUser && currentUser.id) {
+      const supabase = getSupabaseClient();
+      supabase
+        .from('Users')
+        .select('id, Firstname, Surname, email')
+        .eq('id', currentUser.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            const name = data.Firstname && data.Surname 
+              ? `${data.Firstname} ${data.Surname}`
+              : data.Firstname || data.Surname || data.email?.split('@')[0] || 'User';
+            const newPlayers = [...selectedPlayers];
+            newPlayers[0] = { id: data.id, name };
+            setSelectedPlayers(newPlayers);
+          }
+        });
+    }
+  }, [showPlayerSelection, currentUser]);
+  
+  // Filter players based on search term
+  const filteredPlayers = useMemo(() => {
+    if (!playerSearchTerm.trim()) return availablePlayers.slice(0, 10);
+    const term = playerSearchTerm.toLowerCase();
+    return availablePlayers
+      .filter(p => 
+        p.name.toLowerCase().includes(term) || 
+        p.email.toLowerCase().includes(term)
+      )
+      .slice(0, 10);
+  }, [availablePlayers, playerSearchTerm]);
+  
+  const handleSelectPlayer = (playerIndex, player) => {
+    const newPlayers = [...selectedPlayers];
+    newPlayers[playerIndex] = player;
+    setSelectedPlayers(newPlayers);
+    setShowPlayerDropdown(null);
+    setPlayerSearchTerm('');
+  };
+  
+  const handleAddGuest = (playerIndex) => {
+    const newPlayers = [...selectedPlayers];
+    newPlayers[playerIndex] = { id: 'guest', name: 'Guest' };
+    setSelectedPlayers(newPlayers);
+    setShowPlayerDropdown(null);
+  };
+
+  // Show player selection screen if booking details are set
+  if (isAuthenticated && selectedClub && showPlayerSelection && bookingDetails) {
+    const clubBgColor = selectedClub.backgroundColor;
+    const backgroundColor = (clubBgColor && typeof clubBgColor === 'string' && clubBgColor.trim() !== '') 
+      ? clubBgColor.trim() 
+      : '#052333';
+    const fontColor = (selectedClub.fontColor && typeof selectedClub.fontColor === 'string' && selectedClub.fontColor.trim() !== '') 
+      ? selectedClub.fontColor.trim() 
+      : '#ffffff';
+    const selectedColor = (selectedClub.selectedColor && typeof selectedClub.selectedColor === 'string' && selectedClub.selectedColor.trim() !== '') 
+      ? selectedClub.selectedColor.trim() 
+      : '#667eea';
+
+    return (
+      <View style={[styles.container, { backgroundColor }]}>
+        <StatusBar style="light" />
+        {/* White Header */}
+        <View style={styles.clubHeader}>
+          <View style={styles.clubHeaderLogo}>
+            {selectedClub.logo ? (
+              <ExpoImage
+                source={{ uri: selectedClub.logo }}
+                style={styles.clubHeaderLogoImage}
+                contentFit="contain"
+              />
+            ) : (
+              <View style={styles.clubHeaderLogoIcons}>
+                <OpenActiveIcon name="open-o" size={24} color="#052333" opacity={1.0} />
+                <OpenActiveIcon name="open-p" size={24} color="#052333" opacity={1.0} />
+                <OpenActiveIcon name="open-e" size={24} color="#052333" opacity={1.0} />
+                <OpenActiveIcon name="open-n" size={24} color="#052333" opacity={1.0} />
+              </View>
+            )}
+          </View>
+          <View style={styles.clubHeaderRight}>
+            <TouchableOpacity
+              style={styles.burgerMenuButton}
+              onPress={() => setShowBurgerMenu(!showBurgerMenu)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.burgerMenuIcon}>
+                <View style={styles.burgerLine} />
+                <View style={styles.burgerLine} />
+                <View style={styles.burgerLine} />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileButton}
+              activeOpacity={0.7}
+            >
+              <View style={styles.profilePicture}>
+                <Text style={styles.profileInitials}>
+                  {userName ? userName.charAt(0).toUpperCase() : 'U'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <ScrollView 
+          style={[styles.clubDetailContainer, { backgroundColor }]}
+          contentContainerStyle={styles.clubDetailScrollContent}
+        >
+          <View style={styles.clubDetailContent}>
+            <Text style={[styles.clubDetailTitle, { color: fontColor, textAlign: 'center', marginBottom: 30 }]}>Select players</Text>
+            
+            {/* Booking Details Summary Card */}
+            {bookingDetails && bookingDetails.date && (
+              <View style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                borderRadius: 8,
+                padding: 16,
+                marginBottom: 30,
+                width: '100%',
+                flexDirection: 'row',
+                justifyContent: 'space-around',
+                alignItems: 'center',
+                borderLeftWidth: 3,
+                borderRightWidth: 3,
+                borderLeftColor: selectedColor,
+                borderRightColor: selectedColor
+              }}>
+                <View style={{ flex: 1, alignItems: 'center', borderRightWidth: 1, borderRightColor: 'rgba(255, 255, 255, 0.2)' }}>
+                  <Text style={{ fontSize: 14, color: fontColor, opacity: 0.8, marginBottom: 4 }}>
+                    {new Date(bookingDetails.date).toLocaleDateString('en-US', { weekday: 'long' })}
+                  </Text>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: fontColor }}>
+                    {new Date(bookingDetails.date).getDate()} {new Date(bookingDetails.date).toLocaleDateString('en-US', { month: 'short' })}
+                  </Text>
+                </View>
+                {bookingDetails.time && (
+                  <View style={{ flex: 1, alignItems: 'center', borderRightWidth: 1, borderRightColor: 'rgba(255, 255, 255, 0.2)' }}>
+                    <Text style={{ fontSize: 14, color: fontColor, opacity: 0.8, marginBottom: 4 }}>
+                      Start
+                    </Text>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: fontColor }}>
+                      {bookingDetails.time}
+                    </Text>
+                  </View>
+                )}
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 14, color: fontColor, opacity: 0.8, marginBottom: 4 }}>
+                    Court {bookingDetails.court}
+                  </Text>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: fontColor }}>
+                    {bookingDetails.duration} min
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Game Type Selection */}
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 30 }}>
+              <TouchableOpacity
+                onPress={() => setBookingType('singles')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  backgroundColor: bookingType === 'singles' ? selectedColor : '#ffffff',
+                  borderRadius: 6,
+                  borderWidth: 2,
+                  borderColor: bookingType === 'singles' ? selectedColor : 'rgba(5, 35, 51, 0.2)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 20 }}>👤</Text>
+                <Text style={{ fontSize: 16, fontWeight: '500', color: bookingType === 'singles' ? '#ffffff' : '#052333' }}>
+                  Singles
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setBookingType('doubles')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  backgroundColor: bookingType === 'doubles' ? selectedColor : '#ffffff',
+                  borderRadius: 6,
+                  borderWidth: 2,
+                  borderColor: bookingType === 'doubles' ? selectedColor : 'rgba(5, 35, 51, 0.2)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 20 }}>👥</Text>
+                <Text style={{ fontSize: 16, fontWeight: '500', color: bookingType === 'doubles' ? '#ffffff' : '#052333' }}>
+                  Doubles
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setBookingType('coaching')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  backgroundColor: bookingType === 'coaching' ? selectedColor : '#ffffff',
+                  borderRadius: 6,
+                  borderWidth: 2,
+                  borderColor: bookingType === 'coaching' ? selectedColor : 'rgba(5, 35, 51, 0.2)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 20 }}>🏆</Text>
+                <Text style={{ fontSize: 16, fontWeight: '500', color: bookingType === 'coaching' ? '#ffffff' : '#052333' }}>
+                  Coaching
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Player Selection Fields */}
+            <View style={{ marginBottom: 30 }}>
+              {bookingType === 'singles' && (
+                <>
+                  {/* Player 1 */}
+                  <View style={{ marginBottom: 16 }}>
+                    <View style={{
+                      backgroundColor: '#ffffff',
+                      borderRadius: 6,
+                      padding: 12,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      borderWidth: 2,
+                      borderColor: selectedPlayers[0] ? selectedColor : 'rgba(5, 35, 51, 0.2)'
+                    }}>
+                      <View style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: selectedPlayers[0] ? selectedColor : 'rgba(5, 35, 51, 0.1)',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Text style={{
+                          color: selectedPlayers[0] ? '#ffffff' : '#052333',
+                          fontWeight: '600',
+                          fontSize: 16
+                        }}>
+                          {selectedPlayers[0] ? selectedPlayers[0].name.charAt(0).toUpperCase() : '?'}
+                        </Text>
+                      </View>
+                      {selectedPlayers[0] ? (
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: '#052333', fontSize: 16, fontWeight: '500' }}>
+                            {selectedPlayers[0].name}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={{ flex: 1, position: 'relative' }}>
+                          <TextInput
+                            placeholder="Type players name & select"
+                            placeholderTextColor="#999"
+                            value={showPlayerDropdown === 0 ? playerSearchTerm : ''}
+                            onChangeText={(text) => {
+                              setPlayerSearchTerm(text);
+                              setShowPlayerDropdown(0);
+                            }}
+                            onFocus={() => setShowPlayerDropdown(0)}
+                            style={{ flex: 1, fontSize: 16, color: '#052333' }}
+                          />
+                          {showPlayerDropdown === 0 && filteredPlayers.length > 0 && (
+                            <View style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              right: 0,
+                              backgroundColor: '#ffffff',
+                              borderRadius: 6,
+                              marginTop: 4,
+                              maxHeight: 200,
+                              zIndex: 1000,
+                              borderWidth: 1,
+                              borderColor: 'rgba(5, 35, 51, 0.2)',
+                              shadowColor: '#000',
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.25,
+                              shadowRadius: 3.84,
+                              elevation: 5
+                            }}>
+                              <FlatList
+                                data={filteredPlayers}
+                                keyExtractor={(item) => item.id}
+                                renderItem={({ item }) => (
+                                  <TouchableOpacity
+                                    onPress={() => handleSelectPlayer(0, item)}
+                                    style={{
+                                      padding: 12,
+                                      borderBottomWidth: 1,
+                                      borderBottomColor: 'rgba(5, 35, 51, 0.1)',
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      gap: 12
+                                    }}
+                                  >
+                                    <View style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: 16,
+                                      backgroundColor: selectedColor,
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}>
+                                      <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 14 }}>
+                                        {item.name.charAt(0).toUpperCase()}
+                                      </Text>
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={{ color: '#052333', fontSize: 14, fontWeight: '500' }}>
+                                        {item.name}
+                                      </Text>
+                                      <Text style={{ color: '#666', fontSize: 12 }}>
+                                        {item.email}
+                                      </Text>
+                                    </View>
+                                  </TouchableOpacity>
+                                )}
+                              />
+                              <TouchableOpacity
+                                onPress={() => handleAddGuest(0)}
+                                style={{
+                                  padding: 12,
+                                  borderTopWidth: 1,
+                                  borderTopColor: 'rgba(5, 35, 51, 0.1)',
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 12
+                                }}
+                              >
+                                <View style={{
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: 16,
+                                  backgroundColor: '#052333',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}>
+                                  <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 14 }}>
+                                    G
+                                  </Text>
+                                </View>
+                                <Text style={{ color: '#052333', fontSize: 14, fontWeight: '500' }}>
+                                  Guest
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                      {selectedPlayers[0] && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            const newPlayers = [...selectedPlayers];
+                            newPlayers[0] = null;
+                            setSelectedPlayers(newPlayers);
+                          }}
+                        >
+                          <Text style={{ color: '#666', fontSize: 20 }}>×</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                  {/* Player 2 */}
+                  <View style={{ marginBottom: 16 }}>
+                    <View style={{
+                      backgroundColor: '#ffffff',
+                      borderRadius: 6,
+                      padding: 12,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      borderWidth: 2,
+                      borderColor: selectedPlayers[1] ? selectedColor : 'rgba(5, 35, 51, 0.2)'
+                    }}>
+                      <View style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: selectedPlayers[1] ? selectedColor : 'rgba(5, 35, 51, 0.1)',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Text style={{
+                          color: selectedPlayers[1] ? '#ffffff' : '#052333',
+                          fontWeight: '600',
+                          fontSize: 16
+                        }}>
+                          {selectedPlayers[1] ? (selectedPlayers[1].id === 'guest' ? 'G' : selectedPlayers[1].name.charAt(0).toUpperCase()) : '?'}
+                        </Text>
+                      </View>
+                      {selectedPlayers[1] ? (
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: '#052333', fontSize: 16, fontWeight: '500' }}>
+                            {selectedPlayers[1].name}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={{ flex: 1, position: 'relative' }}>
+                          <TextInput
+                            placeholder="Type players name & select"
+                            placeholderTextColor="#999"
+                            value={showPlayerDropdown === 1 ? playerSearchTerm : ''}
+                            onChangeText={(text) => {
+                              setPlayerSearchTerm(text);
+                              setShowPlayerDropdown(1);
+                            }}
+                            onFocus={() => setShowPlayerDropdown(1)}
+                            style={{ flex: 1, fontSize: 16, color: '#052333' }}
+                          />
+                          {showPlayerDropdown === 1 && filteredPlayers.length > 0 && (
+                            <View style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              right: 0,
+                              backgroundColor: '#ffffff',
+                              borderRadius: 6,
+                              marginTop: 4,
+                              maxHeight: 200,
+                              zIndex: 1000,
+                              borderWidth: 1,
+                              borderColor: 'rgba(5, 35, 51, 0.2)',
+                              shadowColor: '#000',
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.25,
+                              shadowRadius: 3.84,
+                              elevation: 5
+                            }}>
+                              <FlatList
+                                data={filteredPlayers}
+                                keyExtractor={(item) => item.id}
+                                renderItem={({ item }) => (
+                                  <TouchableOpacity
+                                    onPress={() => handleSelectPlayer(1, item)}
+                                    style={{
+                                      padding: 12,
+                                      borderBottomWidth: 1,
+                                      borderBottomColor: 'rgba(5, 35, 51, 0.1)',
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      gap: 12
+                                    }}
+                                  >
+                                    <View style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: 16,
+                                      backgroundColor: selectedColor,
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}>
+                                      <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 14 }}>
+                                        {item.name.charAt(0).toUpperCase()}
+                                      </Text>
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={{ color: '#052333', fontSize: 14, fontWeight: '500' }}>
+                                        {item.name}
+                                      </Text>
+                                      <Text style={{ color: '#666', fontSize: 12 }}>
+                                        {item.email}
+                                      </Text>
+                                    </View>
+                                  </TouchableOpacity>
+                                )}
+                              />
+                              <TouchableOpacity
+                                onPress={() => handleAddGuest(1)}
+                                style={{
+                                  padding: 12,
+                                  borderTopWidth: 1,
+                                  borderTopColor: 'rgba(5, 35, 51, 0.1)',
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 12
+                                }}
+                              >
+                                <View style={{
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: 16,
+                                  backgroundColor: '#052333',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}>
+                                  <Text style={{ color: '#ffffff', fontWeight: '600', fontSize: 14 }}>
+                                    G
+                                  </Text>
+                                </View>
+                                <Text style={{ color: '#052333', fontSize: 14, fontWeight: '500' }}>
+                                  Guest
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                      {selectedPlayers[1] && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            const newPlayers = [...selectedPlayers];
+                            newPlayers[1] = null;
+                            setSelectedPlayers(newPlayers);
+                          }}
+                        >
+                          <Text style={{ color: '#666', fontSize: 20 }}>×</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                </>
+              )}
+              
+              {bookingType === 'doubles' && (
+                <>
+                  {[0, 1, 2, 3].map((index) => (
+                    <View key={index} style={{ marginBottom: 16 }}>
+                      <View style={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: 6,
+                        padding: 12,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 12,
+                        borderWidth: 2,
+                        borderColor: selectedPlayers[index] ? selectedColor : 'rgba(5, 35, 51, 0.2)'
+                      }}>
+                        <View style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          backgroundColor: selectedPlayers[index] ? selectedColor : 'rgba(5, 35, 51, 0.1)',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          <Text style={{
+                            color: selectedPlayers[index] ? '#ffffff' : '#052333',
+                            fontWeight: '600',
+                            fontSize: 16
+                          }}>
+                            {selectedPlayers[index] ? (selectedPlayers[index].id === 'guest' ? 'G' : selectedPlayers[index].name.charAt(0).toUpperCase()) : '?'}
+                          </Text>
+                        </View>
+                        {selectedPlayers[index] ? (
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: '#052333', fontSize: 16, fontWeight: '500' }}>
+                              {selectedPlayers[index].name}
+                            </Text>
+                          </View>
+                        ) : (
+                          <TextInput
+                            placeholder="Type players name & select"
+                            placeholderTextColor="#999"
+                            value={showPlayerDropdown === index ? playerSearchTerm : ''}
+                            onChangeText={(text) => {
+                              setPlayerSearchTerm(text);
+                              setShowPlayerDropdown(index);
+                            }}
+                            onFocus={() => setShowPlayerDropdown(index)}
+                            style={{ flex: 1, fontSize: 16, color: '#052333' }}
+                          />
+                        )}
+                        {selectedPlayers[index] && (
+                          <TouchableOpacity
+                            onPress={() => {
+                              const newPlayers = [...selectedPlayers];
+                              newPlayers[index] = null;
+                              setSelectedPlayers(newPlayers);
+                            }}
+                          >
+                            <Text style={{ color: '#666', fontSize: 20 }}>×</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )}
+              
+              {bookingType === 'coaching' && (
+                <>
+                  <View style={{ marginBottom: 16 }}>
+                    <View style={{
+                      backgroundColor: '#ffffff',
+                      borderRadius: 6,
+                      padding: 12,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      borderWidth: 2,
+                      borderColor: selectedPlayers[0] ? selectedColor : 'rgba(5, 35, 51, 0.2)'
+                    }}>
+                      <View style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: selectedPlayers[0] ? selectedColor : 'rgba(5, 35, 51, 0.1)',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Text style={{
+                          color: selectedPlayers[0] ? '#ffffff' : '#052333',
+                          fontWeight: '600',
+                          fontSize: 16
+                        }}>
+                          {selectedPlayers[0] ? selectedPlayers[0].name.charAt(0).toUpperCase() : '?'}
+                        </Text>
+                      </View>
+                      {selectedPlayers[0] ? (
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: '#052333', fontSize: 16, fontWeight: '500' }}>
+                            {selectedPlayers[0].name}
+                          </Text>
+                        </View>
+                      ) : (
+                        <TextInput
+                          placeholder="Type client name & select"
+                          placeholderTextColor="#999"
+                          value={playerSearchTerm}
+                          onChangeText={setPlayerSearchTerm}
+                          style={{ flex: 1, fontSize: 16, color: '#052333' }}
+                        />
+                      )}
+                      {selectedPlayers[0] && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            const newPlayers = [...selectedPlayers];
+                            newPlayers[0] = null;
+                            setSelectedPlayers(newPlayers);
+                          }}
+                        >
+                          <Text style={{ color: '#666', fontSize: 20 }}>×</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                  {/* Coach Selection - List */}
+                  <View style={{ marginBottom: 16 }}>
+                    <View style={{
+                      backgroundColor: '#ffffff',
+                      borderRadius: 6,
+                      padding: 12,
+                      borderWidth: 2,
+                      borderColor: selectedPlayers[1] ? selectedColor : 'rgba(5, 35, 51, 0.2)'
+                    }}>
+                      {selectedPlayers[1] ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                          <View style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            backgroundColor: selectedColor,
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <Text style={{
+                              color: '#ffffff',
+                              fontWeight: '600',
+                              fontSize: 16
+                            }}>
+                              {selectedPlayers[1].name.charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: '#052333', fontSize: 16, fontWeight: '500' }}>
+                              {selectedPlayers[1].name}
+                            </Text>
+                            <Text style={{ color: '#666', fontSize: 12 }}>
+                              {selectedPlayers[1].email}
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => {
+                              const newPlayers = [...selectedPlayers];
+                              newPlayers[1] = null;
+                              setSelectedPlayers(newPlayers);
+                            }}
+                          >
+                            <Text style={{ color: '#666', fontSize: 20 }}>×</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <ScrollView style={{ maxHeight: 300 }}>
+                          {coaches.map((coach) => (
+                            <TouchableOpacity
+                              key={coach.id}
+                              onPress={() => handleSelectPlayer(1, coach)}
+                              style={{
+                                padding: 12,
+                                borderBottomWidth: 1,
+                                borderBottomColor: 'rgba(5, 35, 51, 0.1)',
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 12
+                              }}
+                            >
+                              <View style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 20,
+                                backgroundColor: selectedColor,
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                <Text style={{
+                                  color: '#ffffff',
+                                  fontWeight: '600',
+                                  fontSize: 16
+                                }}>
+                                  {coach.name.charAt(0).toUpperCase()}
+                                </Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ color: '#052333', fontSize: 16, fontWeight: '500' }}>
+                                  {coach.name}
+                                </Text>
+                                <Text style={{ color: '#666', fontSize: 12 }}>
+                                  {coach.email}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      )}
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+
+            {/* Navigation Buttons */}
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 40 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowPlayerSelection(false);
+                  setBookingDetails(null);
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 14,
+                  paddingHorizontal: 24,
+                  backgroundColor: '#ffffff',
+                  borderRadius: 6,
+                  borderWidth: 2,
+                  borderColor: 'rgba(5, 35, 51, 0.2)',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 16, fontWeight: '500', color: '#052333' }}>
+                  Back
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  // TODO: Navigate to next step or create booking
+                  console.log('Next step', { bookingType, selectedPlayers, bookingDetails });
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 14,
+                  paddingHorizontal: 24,
+                  backgroundColor: selectedColor,
+                  borderRadius: 6,
+                  borderWidth: 2,
+                  borderColor: selectedColor,
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 16, fontWeight: '500', color: '#ffffff' }}>
+                  Next step
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
   // Show club detail screen if a club is selected
   if (isAuthenticated && selectedClub) {
     // Use backgroundColor from club settings, default to #052333 if not set or empty
@@ -754,6 +1598,27 @@ export default function App() {
         if (!isNaN(parsed) && parsed > 0) {
           bookingSlotInterval = parsed;
         }
+      }
+    }
+    
+    // Parse sessionDuration (JSONB array)
+    let sessionDuration = [60]; // default
+    const durationValue = selectedClub.sessionDuration;
+    if (durationValue !== null && durationValue !== undefined) {
+      if (Array.isArray(durationValue)) {
+        sessionDuration = durationValue;
+      } else if (typeof durationValue === 'string') {
+        try {
+          const parsed = JSON.parse(durationValue);
+          sessionDuration = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          const parsed = parseInt(String(durationValue), 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            sessionDuration = [parsed];
+          }
+        }
+      } else if (typeof durationValue === 'number') {
+        sessionDuration = [durationValue];
       }
     }
     
@@ -811,6 +1676,7 @@ export default function App() {
       setSelectedDate(dateString);
       setSelectedCourt(null);
       setSelectedTime(null);
+      setSelectedDuration(null);
     };
     
     const handleBooking = () => {
@@ -968,37 +1834,78 @@ export default function App() {
             <View style={styles.courtSelectionContainer}>
               <View style={styles.courtButtonsGrid}>
                 {courts.map((courtNum) => (
-                  <TouchableOpacity
-                    key={courtNum}
+                  <View 
+                    key={courtNum} 
                     style={[
-                      styles.courtButton,
-                      selectedCourt === courtNum && { backgroundColor: selectedColor, borderColor: selectedColor }
+                      styles.courtCard,
+                      {
+                        backgroundColor: '#ffffff',
+                        borderWidth: 0,
+                        borderRadius: 3,
+                        padding: 16
+                      }
                     ]}
-                    onPress={() => setSelectedCourt(courtNum)}
-                    activeOpacity={0.7}
                   >
-                    <Text style={[styles.courtButtonText, selectedCourt === courtNum && styles.courtButtonTextSelected]}>
-                      Court {courtNum}
-                    </Text>
-                  </TouchableOpacity>
+                    <View
+                      style={[
+                        styles.courtButton,
+                        { 
+                          backgroundColor: '#ffffff',
+                          borderColor: 'rgba(255, 255, 255, 0.2)',
+                          width: '100%'
+                        }
+                      ]}
+                    >
+                      <View style={styles.courtButtonContent}>
+                        <Text style={[styles.courtButtonText, { color: '#052333' }]}>
+                          Court {courtNum}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    {/* Duration Selection - Always visible for all courts */}
+                    {sessionDuration && sessionDuration.length > 0 && (
+                      <View style={styles.durationSelectionContainer}>
+                        <View style={styles.durationButtonsGrid}>
+                          {sessionDuration.map((duration) => (
+                            <TouchableOpacity
+                              key={duration}
+                              style={[
+                                styles.durationButton,
+                                selectedCourt === courtNum && selectedDuration === duration && { backgroundColor: selectedColor, borderColor: selectedColor },
+                                { backgroundColor: selectedCourt === courtNum && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.1)' }
+                              ]}
+                              onPress={() => {
+                                // Navigate to player selection
+                                setBookingDetails({
+                                  court: courtNum,
+                                  date: selectedDate,
+                                  time: selectedTime,
+                                  duration: duration
+                                });
+                                setShowPlayerSelection(true);
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={[
+                                styles.durationButtonText, 
+                                selectedCourt === courtNum && selectedDuration === duration && styles.durationButtonTextSelected, 
+                                { color: selectedCourt === courtNum && selectedDuration === duration ? '#ffffff' : '#052333' }
+                              ]}>
+                                {duration}min
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <Text style={[styles.courtButtonSubtext, { color: '#052333', opacity: 0.8 }]}>
+                          Available: Singles & Doubles
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 ))}
               </View>
             </View>
-
-            {/* Book Button */}
-            {selectedCourt && selectedTime && (
-              <View style={styles.bookButtonContainer}>
-                <TouchableOpacity
-                  style={[styles.bookButton, { backgroundColor: fontColor }]}
-                  onPress={handleBooking}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.bookButtonText, { color: backgroundColor }]}>
-                    Book Court {selectedCourt} at {selectedTime}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
           </View>
         </ScrollView>
         
@@ -2325,6 +3232,64 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   courtButtonTextSelected: {
+    color: '#ffffff',
+  },
+  courtButtonContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  courtButtonSubtext: {
+    fontSize: 11,
+    color: '#052333',
+    fontFamily: 'Poppins',
+    opacity: 0.8,
+  },
+  courtButtonSubtextSelected: {
+    color: '#ffffff',
+    opacity: 0.9,
+  },
+  courtCard: {
+    minWidth: 200,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  durationSelectionContainer: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 12,
+  },
+  durationTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    fontFamily: 'Poppins',
+    marginBottom: 4,
+  },
+  durationButtonsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  durationButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    fontWeight: '500',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 60,
+  },
+  durationButtonText: {
+    fontSize: 14,
+    fontFamily: 'Poppins',
+    fontWeight: '500',
+  },
+  durationButtonTextSelected: {
     color: '#ffffff',
   },
   bookButtonContainer: {

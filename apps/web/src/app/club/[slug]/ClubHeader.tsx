@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth-context';
+import { getSupabaseClientClient } from '@/lib/supabase';
 import styles from '@/styles/frontend.module.css';
 
 interface ClubHeaderProps {
@@ -15,7 +17,42 @@ interface ClubHeaderProps {
 
 export default function ClubHeader({ logo, fontColor, backgroundColor, selectedColor, currentPath }: ClubHeaderProps) {
   const [logoError, setLogoError] = useState(false);
+  const [userName, setUserName] = useState<string>('');
+  const { user, loading: authLoading } = useAuth();
   const pathname = usePathname();
+  
+  // Fetch user's name when logged in
+  useEffect(() => {
+    const fetchUserName = async () => {
+      if (user && user.id) {
+        try {
+          const supabase = getSupabaseClientClient();
+          const { data: userData } = await supabase
+            .from('Users')
+            .select('name, Firstname, Surname')
+            .eq('id', user.id)
+            .maybeSingle();
+          
+          if (userData) {
+            const name = userData.name || 
+                        (userData.Firstname && userData.Surname 
+                          ? `${userData.Firstname} ${userData.Surname}` 
+                          : userData.Firstname || userData.Surname || '');
+            setUserName(name || user.email?.split('@')[0] || 'User');
+          } else {
+            setUserName(user.email?.split('@')[0] || 'User');
+          }
+        } catch (err) {
+          console.error('Error fetching user name:', err);
+          setUserName(user.email?.split('@')[0] || 'User');
+        }
+      } else {
+        setUserName('');
+      }
+    };
+    
+    fetchUserName();
+  }, [user]);
   
   // Determine active menu item based on current path
   const isActive = (path: string) => {
@@ -140,22 +177,37 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
           </Link>
         </nav>
 
-        {/* Login Button - Right */}
+        {/* User Name or Login Button - Right */}
         <div style={{ flexShrink: 0 }}>
-          <Link
-            href="/login"
-            className={styles.loginButton}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '1';
-              e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '0.9';
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            Login
-          </Link>
+          {!authLoading && user && userName ? (
+            <div style={{
+              color: '#052333',
+              fontSize: '16px',
+              fontWeight: '500',
+              padding: '8px 20px',
+              border: '1px solid #052333',
+              borderRadius: '6px',
+              display: 'inline-block',
+              opacity: 0.9
+            }}>
+              {userName}
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className={styles.loginButton}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '1';
+                e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '0.9';
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              Login
+            </Link>
+          )}
         </div>
       </div>
     </header>
