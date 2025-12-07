@@ -133,7 +133,9 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             Register
           </Link>
           <Link
-            href="/book"
+            href={currentPath && currentPath.includes('/club/') 
+              ? currentPath.split('/').slice(0, 3).join('/') // Extract /club/[slug] from currentPath
+              : '/book'}
             className={`${styles.navLink} ${isActive('/book') ? styles.navLinkActive : ''}`}
             style={{
               color: isActive('/book') ? activeColor : undefined

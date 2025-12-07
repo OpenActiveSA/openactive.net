@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.28.4",
+    "@expo-google-fonts/poppins": "^0.4.1",
     "@expo/metro-runtime": "~4.0.1",
     "@supabase/supabase-js": "^2.86.0",
     "expo": "52.0.47",

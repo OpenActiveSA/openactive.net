@@ -1,9 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView, Animated, TextInput, Image, Modal, FlatList } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView, Animated, TextInput, Modal, FlatList, Image } from 'react-native';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
-import { Image as ExpoImage } from 'expo-image';
 import { getSupabaseClient } from './lib/supabase';
 
 // Keep the native splash screen visible initially
@@ -48,6 +47,7 @@ function OpenActiveIcon({ name, size = 32, color = '#ffffff', opacity = 0.8, ani
 
 export default function App() {
   console.log('[App] Component rendering...');
+  
   const [fontLoaded, setFontLoaded] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -161,6 +161,7 @@ export default function App() {
     }
     loadFont();
   }, []);
+  
 
   // Hide native splash and animate custom splash screen icons
   useEffect(() => {
@@ -405,6 +406,12 @@ export default function App() {
       } else if (clubsData) {
         console.log('[App] ✅ Successfully loaded clubs:', clubsData.length);
         console.log('[App] Club names:', clubsData.map(c => c.name));
+        // Debug: Log first club's structure
+        if (clubsData && clubsData.length > 0) {
+          console.log('[DEBUG] First club data structure:', JSON.stringify(clubsData[0], null, 2));
+          console.log('[DEBUG] First club backgroundImage:', clubsData[0].backgroundImage, 'type:', typeof clubsData[0].backgroundImage);
+          console.log('[DEBUG] First club logo:', clubsData[0].logo, 'type:', typeof clubsData[0].logo);
+        }
         setClubs(clubsData);
       } else {
         console.log('[App] ❌ No clubs data returned');
@@ -784,6 +791,73 @@ export default function App() {
         });
     }
   }, [showPlayerSelection, currentUser]);
+
+  // Auto-select time when date is selected (for club detail page)
+  // This hook must be at the top level, not inside conditional blocks
+  useEffect(() => {
+    if (isAuthenticated && selectedClub && selectedDate) {
+      // Get booking settings from selected club
+      const openingTime = selectedClub.openingTime || '06:00';
+      const closingTime = selectedClub.closingTime || '22:00';
+      let bookingSlotInterval = 60;
+      const intervalValue = selectedClub.bookingSlotInterval;
+      if (intervalValue !== null && intervalValue !== undefined) {
+        if (typeof intervalValue === 'number') {
+          bookingSlotInterval = intervalValue;
+        } else {
+          const parsed = parseInt(String(intervalValue), 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            bookingSlotInterval = parsed;
+          }
+        }
+      }
+      
+      // Generate time slots
+      const generateTimeSlots = () => {
+        const slots = [];
+        const [openHour, openMinute] = openingTime.split(':').map(Number);
+        const [closeHour, closeMinute] = closingTime.split(':').map(Number);
+        const startMinutes = openHour * 60 + openMinute;
+        const endMinutes = closeHour * 60 + closeMinute;
+        for (let minutes = startMinutes; minutes < endMinutes; minutes += bookingSlotInterval) {
+          const hours = Math.floor(minutes / 60);
+          const mins = minutes % 60;
+          const time = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+          slots.push(time);
+        }
+        return slots;
+      };
+      
+      const timeSlots = generateTimeSlots();
+      
+      if (timeSlots && timeSlots.length > 0 && !selectedTime) {
+        const findClosestTime = (slots, dateString) => {
+          if (!slots || slots.length === 0) return null;
+          const today = new Date();
+          const selectedDate = new Date(dateString);
+          const isToday = selectedDate.toDateString() === today.toDateString();
+          if (!isToday) {
+            return slots[0];
+          }
+          const now = new Date();
+          const currentMinutes = now.getHours() * 60 + now.getMinutes();
+          for (const time of slots) {
+            const [hours, minutes] = time.split(':').map(Number);
+            const timeMinutes = hours * 60 + minutes;
+            if (timeMinutes >= currentMinutes) {
+              return time;
+            }
+          }
+          return slots[slots.length - 1];
+        };
+        
+        const closestTime = findClosestTime(timeSlots, selectedDate);
+        if (closestTime) {
+          setSelectedTime(closestTime);
+        }
+      }
+    }
+  }, [isAuthenticated, selectedClub, selectedDate, selectedTime]);
   
   // Filter players based on search term
   const filteredPlayers = useMemo(() => {
@@ -831,13 +905,29 @@ export default function App() {
         {/* White Header */}
         <View style={styles.clubHeader}>
           <View style={styles.clubHeaderLogo}>
-            {selectedClub.logo ? (
-              <ExpoImage
-                source={{ uri: selectedClub.logo }}
-                style={styles.clubHeaderLogoImage}
-                contentFit="contain"
-              />
-            ) : (
+            {(() => {
+              let logoUri = null;
+              
+              if (selectedClub && typeof selectedClub === 'object' && selectedClub.logo && typeof selectedClub.logo === 'string') {
+                const trimmed = selectedClub.logo.trim();
+                if (trimmed && (trimmed.startsWith('http://') || trimmed.startsWith('https://'))) {
+                  logoUri = trimmed;
+                }
+              }
+              
+              if (logoUri) {
+                return (
+                  <Image
+                    key={`header-logo-${selectedClub.id || 'unknown'}`}
+                    source={{ uri: logoUri }}
+                    style={styles.clubHeaderLogoImage}
+                    resizeMode="contain"
+                  />
+                );
+              }
+              
+              return null;
+            })() || (
               <View style={styles.clubHeaderLogoIcons}>
                 <OpenActiveIcon name="open-o" size={24} color="#052333" opacity={1.0} />
                 <OpenActiveIcon name="open-p" size={24} color="#052333" opacity={1.0} />
@@ -1672,12 +1762,48 @@ export default function App() {
     
     const dateButtons = generateDateButtons();
     
+    // Find the closest time to current time
+    const findClosestTime = (timeSlots, selectedDateString) => {
+      if (!timeSlots || timeSlots.length === 0) return null;
+      
+      const today = new Date();
+      const selectedDate = new Date(selectedDateString);
+      const isToday = selectedDate.toDateString() === today.toDateString();
+      
+      if (!isToday) {
+        // For future dates, select the first time slot
+        return timeSlots[0];
+      }
+      
+      // For today, find the closest time that hasn't passed
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      
+      // Find the first time slot that is >= current time
+      for (const time of timeSlots) {
+        const [hours, minutes] = time.split(':').map(Number);
+        const timeMinutes = hours * 60 + minutes;
+        
+        if (timeMinutes >= currentMinutes) {
+          return time;
+        }
+      }
+      
+      // If all times have passed, return the last time slot
+      return timeSlots[timeSlots.length - 1];
+    };
+    
     const handleDateChange = (dateString) => {
       setSelectedDate(dateString);
       setSelectedCourt(null);
-      setSelectedTime(null);
       setSelectedDuration(null);
+      
+      // Auto-select the closest time
+      const closestTime = findClosestTime(timeSlots, dateString);
+      setSelectedTime(closestTime);
     };
+    
+    // Note: Time auto-selection is handled in the top-level useEffect hook (line 798)
     
     const handleBooking = () => {
       if (selectedCourt && selectedTime && selectedDate) {
@@ -1697,13 +1823,29 @@ export default function App() {
         <View style={styles.clubHeader}>
           {/* Logo - Left */}
           <View style={styles.clubHeaderLogo}>
-            {selectedClub.logo ? (
-              <ExpoImage
-                source={{ uri: selectedClub.logo }}
-                style={styles.clubHeaderLogoImage}
-                contentFit="contain"
-              />
-            ) : (
+            {(() => {
+              let logoUri = null;
+              
+              if (selectedClub && typeof selectedClub === 'object' && selectedClub.logo && typeof selectedClub.logo === 'string') {
+                const trimmed = selectedClub.logo.trim();
+                if (trimmed && (trimmed.startsWith('http://') || trimmed.startsWith('https://'))) {
+                  logoUri = trimmed;
+                }
+              }
+              
+              if (logoUri) {
+                return (
+                  <Image
+                    key={`header-logo-${selectedClub.id || 'unknown'}`}
+                    source={{ uri: logoUri }}
+                    style={styles.clubHeaderLogoImage}
+                    resizeMode="contain"
+                  />
+                );
+              }
+              
+              return null;
+            })() || (
               <View style={styles.clubHeaderLogoIcons}>
                 <OpenActiveIcon name="open-o" size={24} color="#052333" opacity={1.0} />
                 <OpenActiveIcon name="open-p" size={24} color="#052333" opacity={1.0} />
@@ -1892,7 +2034,7 @@ export default function App() {
                                 selectedCourt === courtNum && selectedDuration === duration && styles.durationButtonTextSelected, 
                                 { color: selectedCourt === courtNum && selectedDuration === duration ? '#ffffff' : '#052333' }
                               ]}>
-                                {duration}min
+                                {duration} min
                               </Text>
                             </TouchableOpacity>
                           ))}
@@ -1969,7 +2111,14 @@ export default function App() {
                   <Text style={styles.burgerMenuItemText}>Ranking</Text>
                 </TouchableOpacity>
                 
-                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                <TouchableOpacity 
+                  style={styles.burgerMenuItem} 
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setSelectedClub(null);
+                    setShowBurgerMenu(false);
+                  }}
+                >
                   <Text style={styles.burgerMenuIcon}>🔄</Text>
                   <Text style={styles.burgerMenuItemText}>Switch Club</Text>
                 </TouchableOpacity>
@@ -2127,15 +2276,68 @@ export default function App() {
                   >
                     {/* Club Image/Logo Area */}
                     <View style={styles.clubImageContainer}>
-                      {club.backgroundImage || club.logo ? (
-                        <ExpoImage
-                          source={{ uri: club.backgroundImage || club.logo }}
-                          style={styles.clubImage}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View style={[styles.clubImage, styles.clubImagePlaceholder]} />
-                      )}
+                      {(() => {
+                        // Debug logging
+                        if (club && club.id) {
+                          console.log(`[DEBUG] Club ${club.id} image data:`, {
+                            backgroundImage: club.backgroundImage,
+                            backgroundImageType: typeof club.backgroundImage,
+                            logo: club.logo,
+                            logoType: typeof club.logo,
+                            clubKeys: Object.keys(club || {})
+                          });
+                        }
+                        
+                        let imageUri = null;
+                        
+                        // Safely extract image URI
+                        if (club && typeof club === 'object') {
+                          if (club.backgroundImage) {
+                            console.log('[DEBUG] backgroundImage value:', club.backgroundImage, 'type:', typeof club.backgroundImage);
+                            if (typeof club.backgroundImage === 'string') {
+                              const trimmed = club.backgroundImage.trim();
+                              if (trimmed && (trimmed.startsWith('http://') || trimmed.startsWith('https://'))) {
+                                imageUri = trimmed;
+                              }
+                            } else {
+                              console.warn('[DEBUG] backgroundImage is not a string:', club.backgroundImage);
+                            }
+                          }
+                          if (!imageUri && club.logo) {
+                            console.log('[DEBUG] logo value:', club.logo, 'type:', typeof club.logo);
+                            if (typeof club.logo === 'string') {
+                              const trimmed = club.logo.trim();
+                              if (trimmed && (trimmed.startsWith('http://') || trimmed.startsWith('https://'))) {
+                                imageUri = trimmed;
+                              }
+                            } else {
+                              console.warn('[DEBUG] logo is not a string:', club.logo);
+                            }
+                          }
+                        }
+                        
+                        console.log('[DEBUG] Final imageUri:', imageUri, 'type:', typeof imageUri);
+                        
+                        // Render Image if we have a valid URI
+                        if (imageUri && typeof imageUri === 'string' && imageUri.length > 0) {
+                          const validUri = String(imageUri).trim();
+                          if (validUri && (validUri.startsWith('http://') || validUri.startsWith('https://'))) {
+                            return (
+                              <Image
+                                key={`club-image-${club.id || 'unknown'}`}
+                                source={{ uri: validUri }}
+                                style={styles.clubImage}
+                                resizeMode="cover"
+                              />
+                            );
+                          }
+                        }
+                        
+                        // Fallback to placeholder
+                        return (
+                          <View style={[styles.clubImage, styles.clubImagePlaceholder]} />
+                        );
+                      })()}
                       
                       {/* Favorite Heart Icon */}
                       <TouchableOpacity
@@ -2154,16 +2356,20 @@ export default function App() {
                       </TouchableOpacity>
                       
                       {/* Court Count Badge */}
-                      {club.numberOfCourts !== undefined && (
+                      {club.numberOfCourts !== undefined && club.numberOfCourts !== null && (
                         <View style={styles.courtCountBadge}>
                           <Text style={styles.courtCountIcon}>⚾</Text>
-                          <Text style={styles.courtCountText}>{club.numberOfCourts || 0}</Text>
+                          <Text style={styles.courtCountText}>
+                            {typeof club.numberOfCourts === 'number' ? club.numberOfCourts : 0}
+                          </Text>
                         </View>
                       )}
                       
                       {/* Club Name Overlay */}
                       <View style={styles.clubNameOverlay}>
-                        <Text style={styles.clubNameOverlayText}>{club.name}</Text>
+                        <Text style={styles.clubNameOverlayText}>
+                          {club.name && typeof club.name === 'string' ? club.name : 'Club'}
+                        </Text>
                       </View>
                     </View>
                     
@@ -2171,7 +2377,13 @@ export default function App() {
                     <View style={styles.clubLocationContainer}>
                       <Text style={styles.locationIcon}>📍</Text>
                       <Text style={styles.clubLocationText}>
-                        {club.address || club.description || [club.province, club.country].filter(Boolean).join(', ') || 'Location not specified'}
+                        {(() => {
+                          const address = club.address && typeof club.address === 'string' ? club.address : null;
+                          const description = club.description && typeof club.description === 'string' ? club.description : null;
+                          const province = club.province && typeof club.province === 'string' ? club.province : null;
+                          const country = club.country && typeof club.country === 'string' ? club.country : null;
+                          return address || description || [province, country].filter(Boolean).join(', ') || 'Location not specified';
+                        })()}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -2904,7 +3116,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'rgba(255, 255, 255, 0.3)',
     fontSize: 16,
-    fontFamily: 'Poppins',
+    // Using system default font
     backgroundColor: 'transparent',
     color: '#ffffff',
   },
@@ -2993,7 +3205,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 22,
     fontWeight: '600',
-    fontFamily: 'Poppins',
+    // Using system default font
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,
@@ -3010,7 +3222,7 @@ const styles = StyleSheet.create({
   clubLocationText: {
     color: '#ffffff',
     fontSize: 14,
-    fontFamily: 'Poppins',
+    // Using system default font
     flex: 1,
   },
   emptyContainer: {
@@ -3086,7 +3298,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: 'Poppins',
+    // Using system default font
   },
   clubDetailContainer: {
     flex: 1,
@@ -3105,7 +3317,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
     textAlign: 'center',
-    fontFamily: 'Poppins',
+    // Using system default font
     marginBottom: 30,
   },
   dateSelectionContainer: {
@@ -3155,7 +3367,7 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 12,
     color: '#052333',
-    fontFamily: 'Poppins',
+    // Using system default font
   },
   dateButtonTextBold: {
     fontWeight: '600',
@@ -3168,7 +3380,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
-    fontFamily: 'Poppins',
+    // Using system default font
   },
   timeSelectionContainer: {
     marginBottom: 30,
@@ -3181,9 +3393,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   timeButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    fontSize: 15,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    fontSize: 14,
     fontWeight: '500',
     backgroundColor: '#ffffff',
     borderWidth: 2,
@@ -3191,12 +3403,12 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 70,
+    minWidth: 55,
   },
   timeButtonText: {
     fontSize: 15,
     color: '#052333',
-    fontFamily: 'Poppins',
+    // Using system default font
     fontWeight: '500',
   },
   timeButtonTextSelected: {
@@ -3207,10 +3419,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   courtButtonsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: 8,
-    justifyContent: 'center',
+    width: '100%',
   },
   courtButton: {
     paddingVertical: 8,
@@ -3228,7 +3439,7 @@ const styles = StyleSheet.create({
   courtButtonText: {
     fontSize: 15,
     color: '#052333',
-    fontFamily: 'Poppins',
+    // Using system default font
     fontWeight: '500',
   },
   courtButtonTextSelected: {
@@ -3242,7 +3453,7 @@ const styles = StyleSheet.create({
   courtButtonSubtext: {
     fontSize: 11,
     color: '#052333',
-    fontFamily: 'Poppins',
+    // Using system default font
     opacity: 0.8,
   },
   courtButtonSubtextSelected: {
@@ -3250,7 +3461,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   courtCard: {
-    minWidth: 200,
+    width: '100%',
     display: 'flex',
     flexDirection: 'column',
   },
@@ -3262,7 +3473,7 @@ const styles = StyleSheet.create({
   durationTitle: {
     fontSize: 14,
     fontWeight: '500',
-    fontFamily: 'Poppins',
+    // Using system default font
     marginBottom: 4,
   },
   durationButtonsGrid: {
@@ -3286,7 +3497,7 @@ const styles = StyleSheet.create({
   },
   durationButtonText: {
     fontSize: 14,
-    fontFamily: 'Poppins',
+    // Using system default font
     fontWeight: '500',
   },
   durationButtonTextSelected: {
@@ -3308,7 +3519,7 @@ const styles = StyleSheet.create({
   bookButtonText: {
     fontSize: 18,
     fontWeight: '600',
-    fontFamily: 'Poppins',
+    // Using system default font
   },
   burgerMenuOverlay: {
     position: 'absolute',
@@ -3352,7 +3563,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: '#052333',
-    fontFamily: 'Poppins',
+    // Using system default font
   },
   burgerMenuClose: {
     width: 32,
@@ -3383,7 +3594,7 @@ const styles = StyleSheet.create({
   burgerMenuItemText: {
     fontSize: 16,
     color: '#052333',
-    fontFamily: 'Poppins',
+    // Using system default font
     flex: 1,
   },
   burgerMenuItemLogout: {

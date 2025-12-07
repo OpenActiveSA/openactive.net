@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import ClubHeader from './ClubHeader';
 import ClubFooter from './ClubFooter';
@@ -124,12 +124,56 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
 
   const dateButtons = generateDateButtons();
 
+  // Find the closest time to current time
+  const findClosestTime = useCallback((slots: string[], dateString: string): string | null => {
+    if (!slots || slots.length === 0) return null;
+    
+    const today = new Date();
+    const selectedDate = new Date(dateString);
+    const isToday = selectedDate.toDateString() === today.toDateString();
+    
+    if (!isToday) {
+      // For future dates, select the first time slot
+      return slots[0];
+    }
+    
+    // For today, find the closest time that hasn't passed
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    // Find the first time slot that is >= current time
+    for (const time of slots) {
+      const [hours, minutes] = time.split(':').map(Number);
+      const timeMinutes = hours * 60 + minutes;
+      
+      if (timeMinutes >= currentMinutes) {
+        return time;
+      }
+    }
+    
+    // If all times have passed, return the last time slot
+    return slots[slots.length - 1];
+  }, []);
+
   const handleDateChange = (dateString: string) => {
     setSelectedDate(dateString);
     setSelectedCourt(null);
-    setSelectedTime(null);
     setSelectedDuration(null);
+    
+    // Auto-select the closest time
+    const closestTime = findClosestTime(timeSlots, dateString);
+    setSelectedTime(closestTime);
   };
+  
+  // Auto-select time when component loads or date changes
+  useEffect(() => {
+    if (selectedDate && timeSlots && timeSlots.length > 0 && !selectedTime) {
+      const closestTime = findClosestTime(timeSlots, selectedDate);
+      if (closestTime) {
+        setSelectedTime(closestTime);
+      }
+    }
+  }, [selectedDate, timeSlots, selectedTime, findClosestTime]);
 
   const handleBooking = () => {
     if (selectedCourt && selectedTime && selectedDate) {
@@ -339,7 +383,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                             }
                           }}
                         >
-                          {duration}min
+                          {duration} min
                         </button>
                       ))}
                     </div>
