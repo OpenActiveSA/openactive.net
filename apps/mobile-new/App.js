@@ -67,6 +67,7 @@ export default function App() {
   const [region, setRegion] = useState('All Regions');
   const [favorites, setFavorites] = useState([]);
   const [isRegionDropdownOpen, setIsRegionDropdownOpen] = useState(false);
+  const [selectedClub, setSelectedClub] = useState(null);
   
   // Animated values for each letter (O, P, E, N) - start at 30% opacity
   const opacityO = useRef(new Animated.Value(0.3)).current;
@@ -568,6 +569,33 @@ export default function App() {
     setStep('email');
   };
 
+  // Show club detail screen if a club is selected
+  if (isAuthenticated && selectedClub) {
+    // Use backgroundColor from club settings, default to #052333 if not set or empty
+    const clubBgColor = selectedClub.backgroundColor;
+    const backgroundColor = (clubBgColor && typeof clubBgColor === 'string' && clubBgColor.trim() !== '') 
+      ? clubBgColor.trim() 
+      : '#052333';
+    
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={[styles.clubDetailContainer, { backgroundColor }]}>
+          <TouchableOpacity 
+            style={styles.backButtonHeader}
+            onPress={() => setSelectedClub(null)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+          <View style={styles.clubDetailContent}>
+            <Text style={styles.clubDetailTitle}>{selectedClub.name}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Clubs List Screen - Shown when authenticated */}
@@ -690,8 +718,7 @@ export default function App() {
                     style={styles.clubCard}
                     activeOpacity={0.8}
                     onPress={() => {
-                      // TODO: Navigate to club detail page
-                      Alert.alert('Club', `Navigate to ${club.name}`);
+                      setSelectedClub(club);
                     }}
                   >
                     {/* Club Image/Logo Area */}
@@ -1579,5 +1606,23 @@ const styles = StyleSheet.create({
     height: 30,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  clubDetailContainer: {
+    flex: 1,
+    backgroundColor: '#052333',
+    paddingTop: 40,
+    paddingHorizontal: 20,
+  },
+  clubDetailContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clubDetailTitle: {
+    fontSize: 32,
+    fontWeight: '600',
+    color: '#ffffff',
+    textAlign: 'center',
+    fontFamily: 'Poppins',
   },
 });
