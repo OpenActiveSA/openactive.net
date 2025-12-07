@@ -49,10 +49,10 @@ export function AuthScreen() {
         <div className={styles.content}>
         {/* OpenActive Font Icons - Spelling "OPEN" */}
         <div className={styles.iconRow}>
-          <i className="oa-open-o" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
-          <i className="oa-open-p" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
-          <i className="oa-open-e" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
-          <i className="oa-open-n" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
+          <i className="oa-open-o" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+          <i className="oa-open-p" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+          <i className="oa-open-e" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+          <i className="oa-open-n" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
         </div>
 
         {/* Title */}
@@ -122,10 +122,10 @@ export function AuthScreen() {
 
             {/* OpenActive Font Icons - Spelling "OPEN" */}
             <div className={styles.iconRow}>
-              <i className="oa-open-o" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
-              <i className="oa-open-p" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
-              <i className="oa-open-e" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
-              <i className="oa-open-n" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
+              <i className="oa-open-o" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+              <i className="oa-open-p" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+              <i className="oa-open-e" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+              <i className="oa-open-n" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
             </div>
 
             {/* Title */}

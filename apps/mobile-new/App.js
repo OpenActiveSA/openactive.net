@@ -1,8 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView, Animated, TextInput } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ScrollView, Animated, TextInput, Image } from 'react-native';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { Image as ExpoImage } from 'expo-image';
 import { getSupabaseClient } from './lib/supabase';
 
 // Keep the native splash screen visible initially
@@ -59,6 +60,13 @@ export default function App() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState('email'); // 'email' | 'login' | 'register'
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [clubs, setClubs] = useState([]);
+  const [loadingClubs, setLoadingClubs] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [region, setRegion] = useState('All Regions');
+  const [favorites, setFavorites] = useState([]);
+  const [isRegionDropdownOpen, setIsRegionDropdownOpen] = useState(false);
   
   // Animated values for each letter (O, P, E, N) - start at 30% opacity
   const opacityO = useRef(new Animated.Value(0.3)).current;
@@ -68,6 +76,23 @@ export default function App() {
   
   // Animated value for sliding the splash screen out
   const slideX = useRef(new Animated.Value(0)).current;
+
+  // Check for existing session on mount
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          setIsAuthenticated(true);
+          await loadClubs();
+        }
+      } catch (error) {
+        console.error('[App] Error checking session:', error);
+      }
+    }
+    checkSession();
+  }, []);
 
   // Load font programmatically as backup
   useEffect(() => {
@@ -95,6 +120,13 @@ export default function App() {
 
   // Hide native splash and animate custom splash screen icons
   useEffect(() => {
+    // If already authenticated, skip splash immediately
+    if (isAuthenticated) {
+      setShowSplash(false);
+      SplashScreen.hideAsync().catch(() => {});
+      return;
+    }
+
     // Hide native splash screen immediately
     SplashScreen.hideAsync().catch(() => {
       // Ignore errors
@@ -141,16 +173,16 @@ export default function App() {
       });
     }, 300);
 
-    // Fallback timeout - always hide splash after 4 seconds
+    // Fallback timeout - always hide splash after 3 seconds (reduced from 4)
     const fallbackTimer = setTimeout(() => {
       setShowSplash(false);
-    }, 4000);
+    }, 3000);
 
     return () => {
       clearTimeout(timer);
       clearTimeout(fallbackTimer);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const handleGooglePress = () => {
     Alert.alert('Coming Soon', 'Google sign-in will be available soon');
@@ -247,6 +279,45 @@ export default function App() {
     await checkIfUserExists(email);
   };
 
+  const loadClubs = async () => {
+    setLoadingClubs(true);
+    try {
+      const supabase = getSupabaseClient();
+      // Try to fetch with all columns first, if that fails, try without branding columns
+      let clubsData, error;
+      
+      // First attempt: with all columns including branding
+      const result = await supabase
+        .from('Clubs')
+        .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor, address, description')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+      
+      clubsData = result.data;
+      error = result.error;
+
+      // If error and it's about missing columns, try without branding
+      if (error && (error.code === '42703' || error.message?.includes('column'))) {
+        const fallbackResult = await supabase
+          .from('Clubs')
+          .select('id, name, numberOfCourts, country, province, address, description')
+          .eq('is_active', true)
+          .order('name', { ascending: true });
+        
+        clubsData = fallbackResult.data;
+        error = fallbackResult.error;
+      }
+
+      if (!error && clubsData) {
+        setClubs(clubsData);
+      }
+    } catch (err) {
+      console.error('Error loading clubs:', err);
+    } finally {
+      setLoadingClubs(false);
+    }
+  };
+
   const handleAuthSubmit = async () => {
     setError('');
     setIsLoading(true);
@@ -277,12 +348,13 @@ export default function App() {
             console.error('Error updating last login:', err);
           }
           
-          Alert.alert('Success', 'Logged in successfully!');
-          // TODO: Navigate to home/dashboard
+          // Load clubs and navigate to clubs list
+          setIsAuthenticated(true);
           setShowEmailModal(false);
           setEmail('');
           setPassword('');
           setStep('email');
+          await loadClubs();
         }
       } else if (step === 'register') {
         // Sign up with name, surname and password
@@ -318,14 +390,15 @@ export default function App() {
             console.error('Error updating last login:', err);
           }
           
-          Alert.alert('Success', 'Account created successfully!');
-          // TODO: Navigate to home/dashboard
+          // Load clubs and navigate to clubs list
+          setIsAuthenticated(true);
           setShowEmailModal(false);
           setEmail('');
           setPassword('');
           setName('');
           setSurname('');
           setStep('email');
+          await loadClubs();
         }
       }
     } catch (err) {
@@ -336,10 +409,246 @@ export default function App() {
     }
   };
 
+  // Generate slug from club name (matching web app)
+  const generateSlug = (name) => {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '')
+      .replace(/^\s+|\s+$/g, '');
+  };
+
+  // Extract unique regions from clubs
+  const availableRegions = useMemo(() => {
+    if (!clubs || clubs.length === 0) return ['All Regions'];
+    return ['All Regions', ...Array.from(new Set(
+      clubs
+        .map(club => {
+          if (!club) return null;
+          return club.province || club.country || null;
+        })
+        .filter(reg => reg !== null && typeof reg === 'string' && reg.trim() !== '')
+        .sort()
+    ))];
+  }, [clubs]);
+
+  // Filter clubs based on search and region
+  const filteredClubs = useMemo(() => {
+    if (!clubs || clubs.length === 0) return [];
+    const currentRegion = region || 'All Regions';
+    const currentSearchTerm = searchTerm || '';
+    
+    return clubs
+      .filter(club => {
+        if (!club || !club.name) return false;
+        const matchesSearch = club.name.toLowerCase().includes(currentSearchTerm.toLowerCase());
+        const matchesRegion = currentRegion === 'All Regions' || 
+          (club.province && club.province === currentRegion) || 
+          (club.country && club.country === currentRegion);
+        return matchesSearch && matchesRegion;
+      })
+      .sort((a, b) => {
+        // Sort favorites first
+        const aFav = a && a.id && favorites.includes(a.id);
+        const bFav = b && b.id && favorites.includes(b.id);
+        if (aFav && !bFav) return -1;
+        if (!aFav && bFav) return 1;
+        if (!a || !a.name) return 1;
+        if (!b || !b.name) return -1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [clubs, region, searchTerm, favorites]);
+
+  const toggleFavorite = (clubId) => {
+    const newFavorites = favorites.includes(clubId)
+      ? favorites.filter(id => id !== clubId)
+      : [...favorites, clubId];
+    setFavorites(newFavorites);
+  };
+
+  const handleLogout = async () => {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+    setClubs([]);
+    setSearchTerm('');
+    setRegion('All Regions');
+    setFavorites([]);
+    setShowEmailModal(false);
+    setEmail('');
+    setPassword('');
+    setName('');
+    setSurname('');
+    setStep('email');
+  };
+
   return (
     <View style={styles.container}>
-      {/* Email Input Screen - Full Page */}
-      {showEmailModal ? (
+      {/* Clubs List Screen - Shown when authenticated */}
+      {isAuthenticated ? (
+        <View style={styles.container}>
+          <StatusBar style="light" />
+          {/* Header */}
+          <View style={styles.clubsHeaderContainer}>
+            <View style={styles.clubsHeaderContent}>
+              <View style={styles.clubsHeaderTop}>
+                <TouchableOpacity 
+                  style={styles.backButtonHeader}
+                  onPress={handleLogout}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.backButtonText}>←</Text>
+                </TouchableOpacity>
+                <View style={styles.clubsLogoRow}>
+                  <View style={styles.clubsLogoRowIcon}>
+                    <OpenActiveIcon name="open-o" size={20} color="#ffffff" opacity={1.0} />
+                  </View>
+                  <View style={styles.clubsLogoRowIcon}>
+                    <OpenActiveIcon name="open-p" size={20} color="#ffffff" opacity={1.0} />
+                  </View>
+                  <View style={styles.clubsLogoRowIcon}>
+                    <OpenActiveIcon name="open-e" size={20} color="#ffffff" opacity={1.0} />
+                  </View>
+                  <View style={styles.clubsLogoRowIcon}>
+                    <OpenActiveIcon name="open-n" size={20} color="#ffffff" opacity={1.0} />
+                  </View>
+                </View>
+              </View>
+              
+              {/* Region Selector */}
+              <View style={styles.regionSelectorContainer}>
+                <TouchableOpacity
+                  style={styles.regionSelector}
+                  onPress={() => setIsRegionDropdownOpen(!isRegionDropdownOpen)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.regionSelectorText}>{region || 'All Regions'}</Text>
+                  <Text style={styles.regionDropdownArrow}>{isRegionDropdownOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+                
+                {isRegionDropdownOpen && (
+                  <View style={styles.regionDropdown}>
+                    <ScrollView style={styles.regionDropdownScroll}>
+                      {availableRegions.map((reg) => (
+                        <TouchableOpacity
+                          key={reg}
+                          style={[
+                            styles.regionDropdownItem,
+                            (region || 'All Regions') === reg && styles.regionDropdownItemActive
+                          ]}
+                          onPress={() => {
+                            setRegion(reg);
+                            setIsRegionDropdownOpen(false);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.regionDropdownItemText}>{reg}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+              
+              {/* Search Box */}
+              <View style={styles.searchContainer}>
+                <TextInput
+                  style={[
+                    styles.searchInput,
+                    searchTerm && styles.searchInputFilled
+                  ]}
+                  placeholder="Search Club"
+                  placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                  value={searchTerm}
+                  onChangeText={setSearchTerm}
+                />
+                <View style={styles.searchIcon}>
+                  <Text style={styles.searchIconText}>🔍</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Content */}
+          <ScrollView 
+            style={styles.clubsContent}
+            contentContainerStyle={styles.clubsContentContainer}
+          >
+            {loadingClubs ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading clubs...</Text>
+              </View>
+            ) : filteredClubs.length === 0 ? (
+              <Text style={styles.emptyText}>
+                {searchTerm ? 'No clubs found.' : 'No clubs available at the moment.'}
+              </Text>
+            ) : (
+              <View style={styles.clubsList}>
+                {filteredClubs.map((club) => (
+                  <TouchableOpacity
+                    key={club.id}
+                    style={styles.clubCard}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      // TODO: Navigate to club detail page
+                      Alert.alert('Club', `Navigate to ${club.name}`);
+                    }}
+                  >
+                    {/* Club Image/Logo Area */}
+                    <View style={styles.clubImageContainer}>
+                      {club.backgroundImage || club.logo ? (
+                        <ExpoImage
+                          source={{ uri: club.backgroundImage || club.logo }}
+                          style={styles.clubImage}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View style={[styles.clubImage, styles.clubImagePlaceholder]} />
+                      )}
+                      
+                      {/* Favorite Heart Icon */}
+                      <TouchableOpacity
+                        style={styles.favoriteButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(club.id);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.favoriteIcon}>
+                          {favorites.includes(club.id) ? '❤️' : '🤍'}
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      {/* Court Count Badge */}
+                      {club.numberOfCourts !== undefined && (
+                        <View style={styles.courtCountBadge}>
+                          <Text style={styles.courtCountIcon}>⚾</Text>
+                          <Text style={styles.courtCountText}>{club.numberOfCourts || 0}</Text>
+                        </View>
+                      )}
+                      
+                      {/* Club Name Overlay */}
+                      <View style={styles.clubNameOverlay}>
+                        <Text style={styles.clubNameOverlayText}>{club.name}</Text>
+                      </View>
+                    </View>
+                    
+                    {/* Location Info */}
+                    <View style={styles.clubLocationContainer}>
+                      <Text style={styles.locationIcon}>📍</Text>
+                      <Text style={styles.clubLocationText}>
+                        {club.address || club.description || [club.province, club.country].filter(Boolean).join(', ') || 'Location not specified'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      ) : showEmailModal ? (
+        /* Email Input Screen - Full Page */
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
           style={styles.container}
@@ -940,5 +1249,221 @@ const styles = StyleSheet.create({
   },
   passwordToggleText: {
     fontSize: 20,
+  },
+  clubsHeaderContainer: {
+    padding: 20,
+    paddingTop: 40,
+    backgroundColor: '#052333',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  clubsHeaderContent: {
+    maxWidth: 600,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  clubsHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 15,
+    position: 'relative',
+  },
+  backButtonHeader: {
+    position: 'absolute',
+    left: 0,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 4,
+  },
+  clubsLogoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  clubsLogoRowIcon: {
+    marginHorizontal: 0,
+  },
+  regionSelectorContainer: {
+    position: 'relative',
+    marginBottom: 10,
+  },
+  regionSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 4,
+    padding: 12,
+    paddingHorizontal: 15,
+  },
+  regionSelectorText: {
+    color: '#ffffff',
+    fontSize: 14,
+  },
+  regionDropdownArrow: {
+    color: '#ffffff',
+    fontSize: 12,
+  },
+  regionDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: '#052333',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 4,
+    marginTop: 4,
+    maxHeight: 300,
+    zIndex: 1000,
+    elevation: 5,
+  },
+  regionDropdownScroll: {
+    maxHeight: 300,
+  },
+  regionDropdownItem: {
+    padding: 12,
+    paddingHorizontal: 15,
+  },
+  regionDropdownItemActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  regionDropdownItemText: {
+    color: '#ffffff',
+    fontSize: 14,
+  },
+  searchContainer: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  searchInput: {
+    flex: 1,
+    padding: 16,
+    paddingRight: 48,
+    borderWidth: 0,
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(255, 255, 255, 0.3)',
+    fontSize: 16,
+    fontFamily: 'Poppins',
+    backgroundColor: 'transparent',
+    color: '#ffffff',
+  },
+  searchInputFilled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    color: '#052333',
+  },
+  searchIcon: {
+    position: 'absolute',
+    right: 16,
+    top: '50%',
+    transform: [{ translateY: -9 }],
+  },
+  searchIconText: {
+    fontSize: 18,
+  },
+  clubsContent: {
+    flex: 1,
+  },
+  clubsContentContainer: {
+    padding: 20,
+  },
+  clubsList: {
+    maxWidth: 600,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  clubCard: {
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    marginBottom: 20,
+  },
+  clubImageContainer: {
+    position: 'relative',
+    height: 200,
+    width: '100%',
+  },
+  clubImage: {
+    width: '100%',
+    height: '100%',
+  },
+  clubImagePlaceholder: {
+    backgroundColor: '#667eea',
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: 15,
+    left: 15,
+    zIndex: 2,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  favoriteIcon: {
+    fontSize: 20,
+  },
+  courtCountBadge: {
+    position: 'absolute',
+    bottom: 15,
+    right: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2196F3',
+    borderRadius: 4,
+    padding: 6,
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+  courtCountIcon: {
+    fontSize: 14,
+  },
+  courtCountText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  clubNameOverlay: {
+    position: 'absolute',
+    bottom: 15,
+    left: 15,
+    zIndex: 1,
+  },
+  clubNameOverlayText: {
+    color: '#ffffff',
+    fontSize: 22,
+    fontWeight: '600',
+    fontFamily: 'Poppins',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  clubLocationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 8,
+  },
+  locationIcon: {
+    fontSize: 16,
+  },
+  clubLocationText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontFamily: 'Poppins',
+    flex: 1,
+  },
+  emptyText: {
+    color: '#ffffff',
+    textAlign: 'center',
+    fontSize: 16,
   },
 });

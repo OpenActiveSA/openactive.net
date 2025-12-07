@@ -146,13 +146,13 @@ export function EmailAuth() {
               // Redirect SUPER_ADMIN to admin dashboard
               router.push('/admin');
             } else {
-              // Redirect regular users to home page
-              router.push('/');
+              // Redirect regular users to clubs list page
+              router.push('/clubs');
             }
           } catch (err) {
             console.error('Error checking user role:', err);
-            // Default to home page if role check fails
-            router.push('/');
+            // Default to clubs list page if role check fails
+            router.push('/clubs');
           }
           router.refresh();
         }
@@ -205,13 +205,13 @@ export function EmailAuth() {
               // Redirect SUPER_ADMIN to admin dashboard
               router.push('/admin');
             } else {
-              // Redirect regular users to home page
-              router.push('/');
+              // Redirect regular users to clubs list page
+              router.push('/clubs');
             }
           } catch (err) {
             console.error('Error checking user role:', err);
-            // Default to home page if role check fails
-            router.push('/');
+            // Default to clubs list page if role check fails
+            router.push('/clubs');
           }
           router.refresh();
         }
