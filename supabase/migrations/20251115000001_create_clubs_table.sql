@@ -56,3 +56,4 @@ CREATE POLICY "Public can view clubs" ON "Clubs"
     USING (true);
 
 
+

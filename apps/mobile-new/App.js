@@ -46,6 +46,7 @@ function OpenActiveIcon({ name, size = 32, color = '#ffffff', opacity = 0.8, ani
 }
 
 export default function App() {
+  console.log('[App] Component rendering...');
   const [fontLoaded, setFontLoaded] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -72,9 +73,15 @@ export default function App() {
   useEffect(() => {
     async function loadFont() {
       try {
-        await Font.loadAsync({
+        // Add timeout to prevent hanging
+        const fontPromise = Font.loadAsync({
           openactive: require('./assets/fonts/openactive.ttf'),
         });
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Font load timeout')), 5000)
+        );
+        
+        await Promise.race([fontPromise, timeoutPromise]);
         setFontLoaded(true);
         console.log('[App] OpenActive font loaded successfully');
       } catch (error) {
