@@ -68,6 +68,16 @@ export default function App() {
   const [favorites, setFavorites] = useState([]);
   const [isRegionDropdownOpen, setIsRegionDropdownOpen] = useState(false);
   const [selectedClub, setSelectedClub] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userName, setUserName] = useState('');
+  const [showBurgerMenu, setShowBurgerMenu] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [selectedCourt, setSelectedCourt] = useState(null);
+  const [selectedTime, setSelectedTime] = useState(null);
+  const [dateScrollIndex, setDateScrollIndex] = useState(0);
   
   // Animated values for each letter (O, P, E, N) - start at 30% opacity
   const opacityO = useRef(new Animated.Value(0.3)).current;
@@ -86,6 +96,30 @@ export default function App() {
         const { data: { session } } = await supabase.auth.getSession();
         if (session && session.user) {
           setIsAuthenticated(true);
+          setCurrentUser(session.user);
+          
+          // Get user's name from Users table
+          try {
+            const { data: userData } = await supabase
+              .from('Users')
+              .select('name, Firstname, Surname')
+              .eq('id', session.user.id)
+              .maybeSingle();
+            
+            if (userData) {
+              const name = userData.name || 
+                          (userData.Firstname && userData.Surname 
+                            ? `${userData.Firstname} ${userData.Surname}` 
+                            : userData.Firstname || userData.Surname || '');
+              setUserName(name || session.user.email?.split('@')[0] || 'User');
+            } else {
+              setUserName(session.user.email?.split('@')[0] || 'User');
+            }
+          } catch (err) {
+            console.error('[App] Error loading user name:', err);
+            setUserName(session.user.email?.split('@')[0] || 'User');
+          }
+          
           await loadClubs();
         }
       } catch (error) {
@@ -322,12 +356,12 @@ export default function App() {
       if (!error && clubsData && clubsData.length > 0) {
         result = await supabase
           .from('Clubs')
-          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor')
+          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval')
           .order('name', { ascending: true });
         
         if (!result.error && result.data) {
           clubsData = result.data;
-          console.log('[App] Step 3 - Added branding columns:', { 
+          console.log('[App] Step 3 - Added branding and booking columns:', { 
             count: clubsData.length 
           });
         }
@@ -337,7 +371,7 @@ export default function App() {
       if (!error && clubsData && clubsData.length > 0) {
         result = await supabase
           .from('Clubs')
-          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor')
+          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval')
           .eq('is_active', true)
           .order('name', { ascending: true });
         
@@ -405,8 +439,31 @@ export default function App() {
             console.error('Error updating last login:', err);
           }
           
+          // Get user's name from Users table
+          try {
+            const { data: userData } = await supabase
+              .from('Users')
+              .select('name, Firstname, Surname')
+              .eq('id', data.user.id)
+              .maybeSingle();
+            
+            if (userData) {
+              const name = userData.name || 
+                          (userData.Firstname && userData.Surname 
+                            ? `${userData.Firstname} ${userData.Surname}` 
+                            : userData.Firstname || userData.Surname || '');
+              setUserName(name || data.user.email?.split('@')[0] || 'User');
+            } else {
+              setUserName(data.user.email?.split('@')[0] || 'User');
+            }
+          } catch (err) {
+            console.error('[App] Error loading user name:', err);
+            setUserName(data.user.email?.split('@')[0] || 'User');
+          }
+          
           // Load clubs and navigate to clubs list
           setIsAuthenticated(true);
+          setCurrentUser(data.user);
           setShowEmailModal(false);
           setEmail('');
           setPassword('');
@@ -447,8 +504,31 @@ export default function App() {
             console.error('Error updating last login:', err);
           }
           
+          // Get user's name from Users table
+          try {
+            const { data: userData } = await supabase
+              .from('Users')
+              .select('name, Firstname, Surname')
+              .eq('id', data.user.id)
+              .maybeSingle();
+            
+            if (userData) {
+              const name = userData.name || 
+                          (userData.Firstname && userData.Surname 
+                            ? `${userData.Firstname} ${userData.Surname}` 
+                            : userData.Firstname || userData.Surname || '');
+              setUserName(name || data.user.email?.split('@')[0] || 'User');
+            } else {
+              setUserName(data.user.email?.split('@')[0] || 'User');
+            }
+          } catch (err) {
+            console.error('[App] Error loading user name:', err);
+            setUserName(data.user.email?.split('@')[0] || 'User');
+          }
+          
           // Load clubs and navigate to clubs list
           setIsAuthenticated(true);
+          setCurrentUser(data.user);
           setShowEmailModal(false);
           setEmail('');
           setPassword('');
@@ -553,10 +633,82 @@ export default function App() {
     setFavorites(newFavorites);
   };
 
+  const handleQuickLogin = async () => {
+    const testEmail = 'jb@openactive.co.za';
+    const testPassword = 'Su5ver303#';
+    
+    setError('');
+    setIsLoading(true);
+    
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: testEmail,
+        password: testPassword,
+      });
+
+      if (authError) {
+        setError(authError.message || 'Quick login failed.');
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        // Update last login in Users table
+        try {
+          await supabase
+            .from('Users')
+            .update({ lastLoginAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+            .eq('id', data.user.id.toString());
+        } catch (err) {
+          console.error('Error updating last login:', err);
+        }
+        
+        // Get user's name from Users table
+        try {
+          const { data: userData } = await supabase
+            .from('Users')
+            .select('name, Firstname, Surname')
+            .eq('id', data.user.id)
+            .maybeSingle();
+          
+          if (userData) {
+            const name = userData.name || 
+                        (userData.Firstname && userData.Surname 
+                          ? `${userData.Firstname} ${userData.Surname}` 
+                          : userData.Firstname || userData.Surname || '');
+            setUserName(name || data.user.email?.split('@')[0] || 'User');
+          } else {
+            setUserName(data.user.email?.split('@')[0] || 'User');
+          }
+        } catch (err) {
+          console.error('[App] Error loading user name:', err);
+          setUserName(data.user.email?.split('@')[0] || 'User');
+        }
+        
+        // Load clubs and navigate to clubs list
+        setIsAuthenticated(true);
+        setCurrentUser(data.user);
+        setShowEmailModal(false);
+        setEmail('');
+        setPassword('');
+        setStep('email');
+        await loadClubs();
+      }
+    } catch (err) {
+      console.error('Quick login error:', err);
+      setError(err.message || 'Quick login failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     const supabase = getSupabaseClient();
     await supabase.auth.signOut();
     setIsAuthenticated(false);
+    setCurrentUser(null);
+    setUserName('');
     setClubs([]);
     setSearchTerm('');
     setRegion('All Regions');
@@ -567,6 +719,7 @@ export default function App() {
     setName('');
     setSurname('');
     setStep('email');
+    setSelectedClub(null);
   };
 
   // Show club detail screen if a club is selected
@@ -577,21 +730,365 @@ export default function App() {
       ? clubBgColor.trim() 
       : '#052333';
     
-    return (
-      <View style={styles.container}>
+    // Get club colors
+    const fontColor = (selectedClub.fontColor && typeof selectedClub.fontColor === 'string' && selectedClub.fontColor.trim() !== '') 
+      ? selectedClub.fontColor.trim() 
+      : '#ffffff';
+    const selectedColor = (selectedClub.selectedColor && typeof selectedClub.selectedColor === 'string' && selectedClub.selectedColor.trim() !== '') 
+      ? selectedClub.selectedColor.trim() 
+      : '#667eea';
+    const hoverColor = (selectedClub.hoverColor && typeof selectedClub.hoverColor === 'string' && selectedClub.hoverColor.trim() !== '') 
+      ? selectedClub.hoverColor.trim() 
+      : 'rgba(255, 255, 255, 0.2)';
+    
+    // Get booking settings
+    const openingTime = selectedClub.openingTime || '06:00';
+    const closingTime = selectedClub.closingTime || '22:00';
+    let bookingSlotInterval = 60; // default
+    const intervalValue = selectedClub.bookingSlotInterval;
+    if (intervalValue !== null && intervalValue !== undefined) {
+      if (typeof intervalValue === 'number') {
+        bookingSlotInterval = intervalValue;
+      } else {
+        const parsed = parseInt(String(intervalValue), 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          bookingSlotInterval = parsed;
+        }
+      }
+    }
+    
+    // Generate time slots
+    const generateTimeSlots = () => {
+      const slots = [];
+      const [openHour, openMinute] = openingTime.split(':').map(Number);
+      const [closeHour, closeMinute] = closingTime.split(':').map(Number);
+      
+      const startMinutes = openHour * 60 + openMinute;
+      const endMinutes = closeHour * 60 + closeMinute;
+      
+      for (let minutes = startMinutes; minutes < endMinutes; minutes += bookingSlotInterval) {
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        const time = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+        slots.push(time);
+      }
+      
+      return slots;
+    };
+    
+    const timeSlots = generateTimeSlots();
+    
+    // Generate court numbers
+    const numberOfCourts = selectedClub.numberOfCourts || 1;
+    const courts = Array.from({ length: numberOfCourts }, (_, i) => i + 1);
+    
+    // Generate date buttons (next 14 days)
+    const generateDateButtons = () => {
+      const dates = [];
+      const today = new Date();
+      for (let i = 0; i < 14; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        const dateString = date.toISOString().split('T')[0];
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+        const dayNumber = date.getDate();
+        const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+        
+        dates.push({
+          dateString,
+          dayName,
+          dayNumber,
+          monthName,
+          isToday: i === 0
+        });
+      }
+      return dates;
+    };
+    
+    const dateButtons = generateDateButtons();
+    
+    const handleDateChange = (dateString) => {
+      setSelectedDate(dateString);
+      setSelectedCourt(null);
+      setSelectedTime(null);
+    };
+    
+    const handleBooking = () => {
+      if (selectedCourt && selectedTime && selectedDate) {
+        // TODO: Implement booking logic
+        Alert.alert('Booking', `Booking Court ${selectedCourt} on ${selectedDate} at ${selectedTime}`);
+      }
+    };
+    
+    // Get user initials for profile picture
+    const userEmail = currentUser?.email || '';
+    const userInitials = userEmail ? userEmail.charAt(0).toUpperCase() : 'U';
+
+  return (
+    <View style={styles.container}>
         <StatusBar style="light" />
-        <View style={[styles.clubDetailContainer, { backgroundColor }]}>
-          <TouchableOpacity 
-            style={styles.backButtonHeader}
-            onPress={() => setSelectedClub(null)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.backButtonText}>← Back</Text>
-          </TouchableOpacity>
-          <View style={styles.clubDetailContent}>
-            <Text style={styles.clubDetailTitle}>{selectedClub.name}</Text>
+        {/* White Header */}
+        <View style={styles.clubHeader}>
+          {/* Logo - Left */}
+          <View style={styles.clubHeaderLogo}>
+            {selectedClub.logo ? (
+              <ExpoImage
+                source={{ uri: selectedClub.logo }}
+                style={styles.clubHeaderLogoImage}
+                contentFit="contain"
+              />
+            ) : (
+              <View style={styles.clubHeaderLogoIcons}>
+                <OpenActiveIcon name="open-o" size={24} color="#052333" opacity={1.0} />
+                <OpenActiveIcon name="open-p" size={24} color="#052333" opacity={1.0} />
+                <OpenActiveIcon name="open-e" size={24} color="#052333" opacity={1.0} />
+                <OpenActiveIcon name="open-n" size={24} color="#052333" opacity={1.0} />
+              </View>
+            )}
+          </View>
+          
+          {/* Right side - Burger menu and profile */}
+          <View style={styles.clubHeaderRight}>
+            <TouchableOpacity
+              style={styles.burgerMenuButton}
+              onPress={() => setShowBurgerMenu(!showBurgerMenu)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.burgerMenuIcon}>
+                <View style={styles.burgerLine} />
+                <View style={styles.burgerLine} />
+                <View style={styles.burgerLine} />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileButton}
+              activeOpacity={0.7}
+            >
+              <View style={styles.profilePicture}>
+                <Text style={styles.profileInitials}>{userInitials}</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
+        
+        <ScrollView 
+          style={[styles.clubDetailContainer, { backgroundColor }]}
+          contentContainerStyle={styles.clubDetailScrollContent}
+        >
+          <View style={styles.clubDetailContent}>
+            {/* Date Selection */}
+            <View style={styles.dateSelectionContainer}>
+              <View style={styles.dateButtonsContainer}>
+                {/* Left Arrow */}
+                {dateScrollIndex > 0 && (
+                  <TouchableOpacity
+                    style={[styles.scrollArrow, { borderColor: fontColor + '33' }]}
+                    onPress={() => setDateScrollIndex(Math.max(0, dateScrollIndex - 1))}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.scrollArrowText, { color: fontColor }]}>‹</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Date Buttons */}
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.dateButtonsScroll}
+                  contentContainerStyle={styles.dateButtonsGrid}
+                >
+                  {dateButtons.slice(dateScrollIndex, dateScrollIndex + 7).map((date) => (
+                    <TouchableOpacity
+                      key={date.dateString}
+                      style={[
+                        styles.dateButton,
+                        selectedDate === date.dateString && { backgroundColor: selectedColor, borderColor: selectedColor }
+                      ]}
+                      onPress={() => handleDateChange(date.dateString)}
+                      activeOpacity={0.7}
+                    >
+                      {date.isToday ? (
+                        <Text style={[styles.dateButtonText, selectedDate === date.dateString && styles.dateButtonTextSelected]}>
+                          Today
+                        </Text>
+                      ) : (
+                        <>
+                          <Text style={[styles.dateButtonText, selectedDate === date.dateString && styles.dateButtonTextSelected]}>
+                            {date.dayName}
+                          </Text>
+                          <Text style={[styles.dateButtonText, styles.dateButtonTextBold, selectedDate === date.dateString && styles.dateButtonTextSelected]}>
+                            {date.dayNumber}
+                          </Text>
+                          <Text style={[styles.dateButtonText, selectedDate === date.dateString && styles.dateButtonTextSelected]}>
+                            {date.monthName}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                
+                {/* Right Arrow */}
+                {dateScrollIndex + 7 < dateButtons.length && (
+                  <TouchableOpacity
+                    style={[styles.scrollArrow, { borderColor: fontColor + '33' }]}
+                    onPress={() => setDateScrollIndex(Math.min(dateButtons.length - 7, dateScrollIndex + 1))}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.scrollArrowText, { color: fontColor }]}>›</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Time Selection */}
+            {selectedDate && (
+              <View style={styles.timeSelectionContainer}>
+                <View style={styles.timeButtonsGrid}>
+                  {timeSlots.map((time) => (
+                    <TouchableOpacity
+                      key={time}
+                      style={[
+                        styles.timeButton,
+                        selectedTime === time && { backgroundColor: selectedColor, borderColor: selectedColor }
+                      ]}
+                      onPress={() => setSelectedTime(time)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.timeButtonText, selectedTime === time && styles.timeButtonTextSelected]}>
+                        {time}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Court Selection */}
+            <View style={styles.courtSelectionContainer}>
+              <View style={styles.courtButtonsGrid}>
+                {courts.map((courtNum) => (
+                  <TouchableOpacity
+                    key={courtNum}
+                    style={[
+                      styles.courtButton,
+                      selectedCourt === courtNum && { backgroundColor: selectedColor, borderColor: selectedColor }
+                    ]}
+                    onPress={() => setSelectedCourt(courtNum)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.courtButtonText, selectedCourt === courtNum && styles.courtButtonTextSelected]}>
+                      Court {courtNum}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Book Button */}
+            {selectedCourt && selectedTime && (
+              <View style={styles.bookButtonContainer}>
+                <TouchableOpacity
+                  style={[styles.bookButton, { backgroundColor: fontColor }]}
+                  onPress={handleBooking}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.bookButtonText, { color: backgroundColor }]}>
+                    Book Court {selectedCourt} at {selectedTime}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+        
+        {/* Burger Menu Overlay */}
+        {showBurgerMenu && (
+          <View style={styles.burgerMenuOverlay}>
+            <TouchableOpacity
+              style={styles.burgerMenuBackdrop}
+              activeOpacity={1}
+              onPress={() => setShowBurgerMenu(false)}
+            />
+            <View style={styles.burgerMenuContent}>
+              <View style={styles.burgerMenuHeader}>
+                <Text style={styles.burgerMenuTitle} numberOfLines={1}>
+                  {userName || 'User'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.burgerMenuClose}
+                  onPress={() => setShowBurgerMenu(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.burgerMenuCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.burgerMenuList}>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>👤</Text>
+                  <Text style={styles.burgerMenuItemText}>My Profile</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>🎾</Text>
+                  <Text style={styles.burgerMenuItemText}>Book a court</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>🏆</Text>
+                  <Text style={styles.burgerMenuItemText}>Manage Matches</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>📅</Text>
+                  <Text style={styles.burgerMenuItemText}>Events</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>📄</Text>
+                  <Text style={styles.burgerMenuItemText}>Club Documents</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>👥</Text>
+                  <Text style={styles.burgerMenuItemText}>Club Members</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>💰</Text>
+                  <Text style={styles.burgerMenuItemText}>Finance</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>🎫</Text>
+                  <Text style={styles.burgerMenuItemText}>Club Membership</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>📊</Text>
+                  <Text style={styles.burgerMenuItemText}>Ranking</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>🔄</Text>
+                  <Text style={styles.burgerMenuItemText}>Switch Club</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>❓</Text>
+                  <Text style={styles.burgerMenuItemText}>Help</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.burgerMenuItem} activeOpacity={0.7}>
+                  <Text style={styles.burgerMenuIcon}>🛒</Text>
+                  <Text style={styles.burgerMenuItemText}>Tennis Store</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.burgerMenuItem} 
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setShowBurgerMenu(false);
+                    handleLogout();
+                  }}
+                >
+                  <Text style={styles.burgerMenuIcon}>🚪</Text>
+                  <Text style={[styles.burgerMenuItemText, styles.burgerMenuItemLogout]}>Log Out</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        )}
       </View>
     );
   }
@@ -1084,6 +1581,16 @@ export default function App() {
               <Text style={styles.socialButtonText}>Continue with email</Text>
             </TouchableOpacity>
 
+            {/* Temporary Quick Login Button for Testing */}
+            <TouchableOpacity 
+              style={[styles.socialButton, styles.quickLoginButton]}
+              onPress={handleQuickLogin}
+              activeOpacity={0.8}
+              disabled={isLoading}
+            >
+              <Text style={styles.quickLoginButtonText}>⚡ Quick Login (Test)</Text>
+            </TouchableOpacity>
+
             {/* Terms */}
             <Text style={styles.termsText}>
               By registering you are accepting our{' '}
@@ -1272,6 +1779,15 @@ const styles = StyleSheet.create({
   linkText: {
     color: '#667eea',
     textDecorationLine: 'underline',
+  },
+  quickLoginButton: {
+    backgroundColor: '#667eea',
+    marginTop: 12,
+  },
+  quickLoginButtonText: {
+    fontSize: 16,
+    color: '#ffffff',
+    fontWeight: '600',
   },
   emailModalContent: {
     flex: 1,
@@ -1607,15 +2123,74 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  clubHeader: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  clubHeaderLogo: {
+    flexShrink: 0,
+  },
+  clubHeaderLogoImage: {
+    height: 40,
+    width: 'auto',
+  },
+  clubHeaderLogoIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  clubHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  burgerMenuButton: {
+    padding: 8,
+  },
+  burgerMenuIcon: {
+    width: 24,
+    height: 18,
+    justifyContent: 'space-between',
+  },
+  burgerLine: {
+    height: 2,
+    backgroundColor: '#052333',
+    borderRadius: 1,
+    width: '100%',
+  },
+  profileButton: {
+    padding: 4,
+  },
+  profilePicture: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#052333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileInitials: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'Poppins',
+  },
   clubDetailContainer: {
     flex: 1,
     backgroundColor: '#052333',
-    paddingTop: 40,
+  },
+  clubDetailScrollContent: {
     paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
   },
   clubDetailContent: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
   },
   clubDetailTitle: {
@@ -1624,5 +2199,230 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     textAlign: 'center',
     fontFamily: 'Poppins',
+    marginBottom: 30,
+  },
+  dateSelectionContainer: {
+    marginBottom: 30,
+    width: '100%',
+  },
+  dateButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scrollArrow: {
+    padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderRadius: 3,
+    minWidth: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollArrowText: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  dateButtonsScroll: {
+    flex: 1,
+  },
+  dateButtonsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  dateButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    fontWeight: '500',
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
+  },
+  dateButtonText: {
+    fontSize: 12,
+    color: '#052333',
+    fontFamily: 'Poppins',
+  },
+  dateButtonTextBold: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  dateButtonTextSelected: {
+    color: '#ffffff',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+    fontFamily: 'Poppins',
+  },
+  timeSelectionContainer: {
+    marginBottom: 30,
+    width: '100%',
+  },
+  timeButtonsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  timeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    fontWeight: '500',
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
+  },
+  timeButtonText: {
+    fontSize: 15,
+    color: '#052333',
+    fontFamily: 'Poppins',
+    fontWeight: '500',
+  },
+  timeButtonTextSelected: {
+    color: '#ffffff',
+  },
+  courtSelectionContainer: {
+    marginBottom: 30,
+    width: '100%',
+  },
+  courtButtonsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  courtButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    fontWeight: '500',
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 100,
+  },
+  courtButtonText: {
+    fontSize: 15,
+    color: '#052333',
+    fontFamily: 'Poppins',
+    fontWeight: '500',
+  },
+  courtButtonTextSelected: {
+    color: '#ffffff',
+  },
+  bookButtonContainer: {
+    marginTop: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+  bookButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    borderRadius: 8,
+    minWidth: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    fontFamily: 'Poppins',
+  },
+  burgerMenuOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+  burgerMenuBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  burgerMenuContent: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: '80%',
+    maxWidth: 320,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  burgerMenuHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  burgerMenuTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#052333',
+    fontFamily: 'Poppins',
+  },
+  burgerMenuClose: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  burgerMenuCloseText: {
+    fontSize: 24,
+    color: '#052333',
+    fontWeight: '300',
+  },
+  burgerMenuList: {
+    flex: 1,
+  },
+  burgerMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  burgerMenuIcon: {
+    fontSize: 20,
+    marginRight: 12,
+    width: 24,
+    textAlign: 'center',
+  },
+  burgerMenuItemText: {
+    fontSize: 16,
+    color: '#052333',
+    fontFamily: 'Poppins',
+    flex: 1,
+  },
+  burgerMenuItemLogout: {
+    color: '#e20761',
+    fontWeight: '600',
   },
 });
