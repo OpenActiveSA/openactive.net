@@ -17,3 +17,4 @@ export function slugMatchesClub(slug: string, clubName: string): boolean {
   return generateSlug(clubName) === slug;
 }
 
+

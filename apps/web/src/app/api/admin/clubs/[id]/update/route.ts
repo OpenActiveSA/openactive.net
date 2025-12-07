@@ -50,6 +50,33 @@ export async function PUT(
     if (body.fontColor !== undefined) {
       updateData.fontColor = body.fontColor && body.fontColor.trim() ? body.fontColor.trim() : null;
     }
+    if (body.hoverColor !== undefined) {
+      updateData.hoverColor = body.hoverColor && body.hoverColor.trim() ? body.hoverColor.trim() : null;
+    }
+    if (body.openingTime !== undefined) {
+      updateData.openingTime = body.openingTime && body.openingTime.trim() ? body.openingTime.trim() : null;
+    }
+    if (body.closingTime !== undefined) {
+      updateData.closingTime = body.closingTime && body.closingTime.trim() ? body.closingTime.trim() : null;
+    }
+    if (body.bookingSlotInterval !== undefined) {
+      const interval = typeof body.bookingSlotInterval === 'number' 
+        ? body.bookingSlotInterval 
+        : (body.bookingSlotInterval ? parseInt(String(body.bookingSlotInterval), 10) : null);
+      if (interval !== null && !isNaN(interval) && interval > 0) {
+        updateData.bookingSlotInterval = interval;
+      } else {
+        updateData.bookingSlotInterval = null;
+      }
+    }
+    if (body.sessionDuration !== undefined) {
+      // sessionDuration is stored as JSONB array
+      if (Array.isArray(body.sessionDuration) && body.sessionDuration.length > 0) {
+        updateData.sessionDuration = body.sessionDuration;
+      } else {
+        updateData.sessionDuration = [60]; // Default to [60] if empty or invalid
+      }
+    }
 
     // Perform the update - try with all fields first
     let data, error;
@@ -66,7 +93,7 @@ export async function PUT(
     // If error is about missing columns, try without branding fields
     if (error && (error.code === '42703' || error.message?.includes('column') || error.message?.includes('schema cache') || error.message?.includes('Could not find'))) {
       console.warn('Missing column detected, trying update without branding fields');
-      const { logo: _, backgroundImage: __, backgroundColor: ___, selectedColor: ____, actionColor: _____, fontColor: ______, ...basicUpdateData } = updateData;
+      const { logo: _, backgroundImage: __, backgroundColor: ___, selectedColor: ____, actionColor: _____, fontColor: ______, hoverColor: _______, sessionDuration: ________, ...basicUpdateData } = updateData;
       
       const basicResult = await supabase
         .from('Clubs')
@@ -83,7 +110,7 @@ export async function PUT(
         return NextResponse.json({ 
           success: true, 
           data,
-          warning: 'Some branding fields were not updated because the columns do not exist in the database. Please run the migration scripts: ADD_CLUB_BRANDING_FIELDS.sql, ADD_CLUB_BACKGROUND_IMAGE.sql, and ADD_CLUB_FONT_COLOR.sql'
+          warning: 'Some branding fields were not updated because the columns do not exist in the database. Please run the migration script: ADD_ALL_CLUB_BRANDING_COLUMNS.sql (or ADD_CLUB_HOVER_COLOR.sql if only hoverColor is missing)'
         });
       }
     }

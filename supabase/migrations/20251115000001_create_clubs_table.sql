@@ -55,3 +55,4 @@ CREATE POLICY "Public can view clubs" ON "Clubs"
     TO anon
     USING (true);
 
+

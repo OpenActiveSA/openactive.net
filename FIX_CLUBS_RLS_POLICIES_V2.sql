@@ -74,3 +74,4 @@ ORDER BY policyname;
 -- Test the function (optional - remove after testing)
 -- SELECT is_super_admin() AS is_admin;
 
+

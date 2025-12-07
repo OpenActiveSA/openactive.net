@@ -68,3 +68,4 @@ FROM "Users" u
 WHERE u.role = 'SUPER_ADMIN'
 LIMIT 1;
 
+

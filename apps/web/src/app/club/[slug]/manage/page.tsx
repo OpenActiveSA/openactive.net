@@ -124,7 +124,7 @@ export default function ClubManagePage({ params }: ClubManageProps) {
           </div>
           <div className={styles.headerActions}>
             <Link 
-              href={`/clubs/${slug}`}
+              href={`/club/${slug}`}
               className={styles.btnView}
               target="_blank"
               rel="noopener noreferrer"

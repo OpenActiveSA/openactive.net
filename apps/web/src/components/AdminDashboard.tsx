@@ -705,7 +705,7 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
               <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <Link 
-                    href={`/clubs/${generateSlug(club.name)}`}
+                    href={`/club/${generateSlug(club.name)}`}
                     className={styles.btnView}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -727,7 +727,7 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
                     Edit
                   </Link>
                   <Link 
-                    href={`/clubs/${generateSlug(club.name)}/admin`}
+                    href={`/club/${generateSlug(club.name)}/admin`}
                     className={styles.btnManage}
                     target="_blank"
                     rel="noopener noreferrer"

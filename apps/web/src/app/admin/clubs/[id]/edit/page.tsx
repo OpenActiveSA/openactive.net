@@ -24,6 +24,7 @@ interface Club {
   selectedColor?: string;
   actionColor?: string;
   fontColor?: string;
+  hoverColor?: string;
   createdAt?: string;
 }
 
@@ -72,6 +73,7 @@ export default function EditClubPage({ params }: EditClubProps) {
   const [selectedColor, setSelectedColor] = useState('#667eea');
   const [actionColor, setActionColor] = useState('#10b981');
   const [fontColor, setFontColor] = useState('#052333');
+  const [hoverColor, setHoverColor] = useState('#f0f0f0');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -116,7 +118,7 @@ export default function EditClubPage({ params }: EditClubProps) {
       // First attempt: with all columns including branding
       const result = await supabase
         .from('Clubs')
-        .select('id, name, numberOfCourts, country, province, is_active, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, createdAt')
+        .select('id, name, numberOfCourts, country, province, is_active, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
         .eq('id', id)
         .single();
       
@@ -167,6 +169,7 @@ export default function EditClubPage({ params }: EditClubProps) {
       setSelectedColor((data as any).selectedColor || '#667eea');
       setActionColor((data as any).actionColor || '#10b981');
       setFontColor((data as any).fontColor || '#052333');
+      setHoverColor((data as any).hoverColor || '#f0f0f0');
       setIsLoading(false);
     } catch (err: any) {
       console.error('Error loading club:', err);
@@ -304,6 +307,7 @@ export default function EditClubPage({ params }: EditClubProps) {
               selectedColor: selectedColor,
               actionColor: actionColor,
               fontColor: fontColor,
+              hoverColor: hoverColor,
             }),
           });
 
@@ -409,6 +413,7 @@ export default function EditClubPage({ params }: EditClubProps) {
               selectedColor: selectedColor,
               actionColor: actionColor,
               fontColor: fontColor,
+              hoverColor: hoverColor,
             }),
           });
 
@@ -502,6 +507,7 @@ export default function EditClubPage({ params }: EditClubProps) {
         updateData.selectedColor = selectedColor && selectedColor.trim() ? selectedColor.trim() : null;
         updateData.actionColor = actionColor && actionColor.trim() ? actionColor.trim() : null;
         updateData.fontColor = fontColor && fontColor.trim() ? fontColor.trim() : null;
+        updateData.hoverColor = hoverColor && hoverColor.trim() ? hoverColor.trim() : null;
       } catch (err) {
         console.warn('Branding columns may not exist, updating without them');
       }
@@ -1184,6 +1190,35 @@ export default function EditClubPage({ params }: EditClubProps) {
                       value={fontColor}
                       onChange={(e) => setFontColor(e.target.value)}
                       placeholder="#052333"
+                      disabled={isSubmitting}
+                      className={styles.formInput}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label htmlFor="hoverColor">Hover Color</label>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <input
+                      id="hoverColor"
+                      type="color"
+                      value={hoverColor}
+                      onChange={(e) => setHoverColor(e.target.value)}
+                      disabled={isSubmitting}
+                      style={{ 
+                        width: '60px', 
+                        height: '40px', 
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={hoverColor}
+                      onChange={(e) => setHoverColor(e.target.value)}
+                      placeholder="#f0f0f0"
                       disabled={isSubmitting}
                       className={styles.formInput}
                       style={{ flex: 1 }}

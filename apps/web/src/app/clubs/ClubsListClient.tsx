@@ -317,7 +317,7 @@ export default function ClubsListClient({ clubs }: ClubsListClientProps) {
             {filteredClubs.map(club => (
               <Link
                 key={club.id}
-                href={`/clubs/${generateSlug(club.name)}`}
+                href={`/club/${generateSlug(club.name)}`}
                 style={{
                   textDecoration: 'none',
                   color: 'inherit'

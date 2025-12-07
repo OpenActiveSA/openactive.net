@@ -71,3 +71,4 @@ After creating the bucket, you can verify it's working by:
 - Images are stored in the path: `clubs/{club-id}/{filename}`
 - Only authenticated users (SUPER_ADMIN) can upload images through the admin interface
 
+

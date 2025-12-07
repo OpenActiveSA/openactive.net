@@ -41,3 +41,4 @@ ORDER BY policyname;
 
 -- ⚠️ REMEMBER: After testing, run FIX_CLUBS_RLS_COMPLETE.sql to restore proper security!
 
+

@@ -227,18 +227,20 @@ export function EmailAuth() {
   const handleBackToEmail = () => {
     setStep('email');
     setPassword('');
-    setDisplayName('');
+    setName('');
+    setSurname('');
     setError('');
   };
 
   return (
     <div className={styles.container}>
       <div className={styles.content}>
-        {/* Logo */}
-        <div className={styles.logoContainer}>
-          <div className={styles.logo}>
-            <span className={styles.logoText}>O</span>
-          </div>
+        {/* OpenActive Font Icons - Spelling "OPEN" */}
+        <div className={styles.iconRow}>
+          <i className="oa-open-o" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
+          <i className="oa-open-p" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
+          <i className="oa-open-e" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
+          <i className="oa-open-n" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
         </div>
 
         {/* Title */}
