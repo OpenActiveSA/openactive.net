@@ -283,36 +283,92 @@ export default function App() {
     setLoadingClubs(true);
     try {
       const supabase = getSupabaseClient();
-      // Try to fetch with all columns first, if that fails, try without branding columns
-      let clubsData, error;
+      console.log('[App] Loading clubs...');
       
-      // First attempt: with all columns including branding
-      const result = await supabase
+      // Start with the absolute minimum - just id and name
+      let result = await supabase
         .from('Clubs')
-        .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor, address, description')
-        .eq('is_active', true)
+        .select('id, name')
         .order('name', { ascending: true });
       
-      clubsData = result.data;
-      error = result.error;
+      let clubsData = result.data;
+      let error = result.error;
 
-      // If error and it's about missing columns, try without branding
-      if (error && (error.code === '42703' || error.message?.includes('column'))) {
-        const fallbackResult = await supabase
+      console.log('[App] Step 1 - Basic query (id, name):', { 
+        data: clubsData, 
+        error, 
+        count: clubsData?.length,
+        errorMessage: error?.message 
+      });
+
+      // If that works, try adding more columns
+      if (!error && clubsData && clubsData.length > 0) {
+        result = await supabase
           .from('Clubs')
-          .select('id, name, numberOfCourts, country, province, address, description')
+          .select('id, name, numberOfCourts, country, province')
+          .order('name', { ascending: true });
+        
+        clubsData = result.data;
+        error = result.error;
+        console.log('[App] Step 2 - Added basic columns:', { 
+          data: clubsData, 
+          error, 
+          count: clubsData?.length 
+        });
+      }
+
+      // Try adding branding columns if basic query worked
+      if (!error && clubsData && clubsData.length > 0) {
+        result = await supabase
+          .from('Clubs')
+          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor')
+          .order('name', { ascending: true });
+        
+        if (!result.error && result.data) {
+          clubsData = result.data;
+          console.log('[App] Step 3 - Added branding columns:', { 
+            count: clubsData.length 
+          });
+        }
+      }
+
+      // Try filtering by is_active if we have clubs
+      if (!error && clubsData && clubsData.length > 0) {
+        result = await supabase
+          .from('Clubs')
+          .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor')
           .eq('is_active', true)
           .order('name', { ascending: true });
         
-        clubsData = fallbackResult.data;
-        error = fallbackResult.error;
+        // Only use filtered result if it returns data, otherwise keep all clubs
+        if (!result.error && result.data && result.data.length > 0) {
+          clubsData = result.data;
+          console.log('[App] Step 4 - Filtered by is_active:', { 
+            count: clubsData.length 
+          });
+        } else {
+          console.log('[App] Step 4 - is_active filter returned no results, keeping all clubs');
+        }
       }
 
-      if (!error && clubsData) {
+      if (error) {
+        console.error('[App] Final error loading clubs:', error);
+        // Even if there's an error, try to use whatever data we got
+        if (clubsData && clubsData.length > 0) {
+          console.log('[App] Using clubs data despite error:', clubsData.length);
+          setClubs(clubsData);
+        }
+      } else if (clubsData) {
+        console.log('[App] ✅ Successfully loaded clubs:', clubsData.length);
+        console.log('[App] Club names:', clubsData.map(c => c.name));
         setClubs(clubsData);
+      } else {
+        console.log('[App] ❌ No clubs data returned');
+        setClubs([]);
       }
     } catch (err) {
-      console.error('Error loading clubs:', err);
+      console.error('[App] Exception loading clubs:', err);
+      setClubs([]);
     } finally {
       setLoadingClubs(false);
     }
@@ -434,17 +490,39 @@ export default function App() {
 
   // Filter clubs based on search and region
   const filteredClubs = useMemo(() => {
-    if (!clubs || clubs.length === 0) return [];
-    const currentRegion = region || 'All Regions';
-    const currentSearchTerm = searchTerm || '';
+    console.log('[App] Filtering clubs:', { 
+      totalClubs: clubs?.length || 0, 
+      region, 
+      searchTerm,
+      favoritesCount: favorites.length 
+    });
     
-    return clubs
+    if (!clubs || clubs.length === 0) {
+      console.log('[App] No clubs to filter');
+      return [];
+    }
+    
+    const currentRegion = region || 'All Regions';
+    const currentSearchTerm = (searchTerm || '').trim();
+    
+    const filtered = clubs
       .filter(club => {
-        if (!club || !club.name) return false;
-        const matchesSearch = club.name.toLowerCase().includes(currentSearchTerm.toLowerCase());
+        if (!club || !club.name) {
+          console.log('[App] Filtering out club (no name):', club);
+          return false;
+        }
+        const matchesSearch = currentSearchTerm === '' || club.name.toLowerCase().includes(currentSearchTerm.toLowerCase());
         const matchesRegion = currentRegion === 'All Regions' || 
           (club.province && club.province === currentRegion) || 
           (club.country && club.country === currentRegion);
+        
+        if (!matchesSearch) {
+          console.log('[App] Club filtered out (search):', club.name);
+        }
+        if (!matchesRegion) {
+          console.log('[App] Club filtered out (region):', club.name, 'region:', club.province || club.country, 'filter:', currentRegion);
+        }
+        
         return matchesSearch && matchesRegion;
       })
       .sort((a, b) => {
@@ -457,6 +535,14 @@ export default function App() {
         if (!b || !b.name) return -1;
         return a.name.localeCompare(b.name);
       });
+    
+    console.log('[App] Filtered clubs result:', { 
+      before: clubs.length, 
+      after: filtered.length,
+      clubNames: filtered.map(c => c.name)
+    });
+    
+    return filtered;
   }, [clubs, region, searchTerm, favorites]);
 
   const toggleFavorite = (clubId) => {
@@ -578,10 +664,24 @@ export default function App() {
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>Loading clubs...</Text>
               </View>
+            ) : clubs.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  No clubs available at the moment.
+                </Text>
+                <Text style={[styles.emptyText, { marginTop: 10, fontSize: 12, opacity: 0.7 }]}>
+                  Check console for errors
+                </Text>
+              </View>
             ) : filteredClubs.length === 0 ? (
-              <Text style={styles.emptyText}>
-                {searchTerm ? 'No clubs found.' : 'No clubs available at the moment.'}
-              </Text>
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  {searchTerm || region !== 'All Regions' ? 'No clubs found matching your filters.' : 'No clubs available at the moment.'}
+                </Text>
+                <Text style={[styles.emptyText, { marginTop: 10, fontSize: 12, opacity: 0.7 }]}>
+                  Total clubs: {clubs.length}
+                </Text>
+              </View>
             ) : (
               <View style={styles.clubsList}>
                 {filteredClubs.map((club) => (
@@ -615,9 +715,11 @@ export default function App() {
                         }}
                         activeOpacity={0.7}
                       >
-                        <Text style={styles.favoriteIcon}>
-                          {favorites.includes(club.id) ? '❤️' : '🤍'}
-                        </Text>
+                        <View style={styles.favoriteIconContainer}>
+                          <Text style={styles.favoriteIcon}>
+                            {favorites.includes(club.id) ? '❤️' : '🤍'}
+                          </Text>
+                        </View>
                       </TouchableOpacity>
                       
                       {/* Court Count Badge */}
@@ -1461,9 +1563,21 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
     flex: 1,
   },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
   emptyText: {
     color: '#ffffff',
     textAlign: 'center',
     fontSize: 16,
+  },
+  favoriteIconContainer: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
