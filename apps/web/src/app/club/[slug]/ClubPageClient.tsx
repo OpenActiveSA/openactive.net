@@ -157,6 +157,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
             guestPlayer1Name,
             guestPlayer2Name,
             guestPlayer3Name,
+            bookingType,
             userId
           `)
           .eq('clubId', club.id)
@@ -167,35 +168,107 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
           console.error('Error loading bookings:', error);
           setBookings([]);
         } else {
-          // Fetch player names separately if needed
-          const bookingsWithNames = await Promise.all((data || []).map(async (booking) => {
-            const names: string[] = [];
+          // Fetch player data separately
+          const bookingsWithPlayers = await Promise.all((data || []).map(async (booking) => {
+            const players: Array<{ id?: string; name: string; isGuest: boolean; isPrimary: boolean }> = [];
             
-            // Fetch player names if they exist
-            if (booking.player1Id) {
-              const { data: user1 } = await supabase
+            // Debug: Log the booking to see what we're working with
+            console.log('Processing booking:', {
+              id: booking.id,
+              player1Id: booking.player1Id,
+              player2Id: booking.player2Id,
+              player3Id: booking.player3Id,
+              player4Id: booking.player4Id,
+              guestPlayer1Name: booking.guestPlayer1Name,
+              guestPlayer2Name: booking.guestPlayer2Name,
+              guestPlayer3Name: booking.guestPlayer3Name,
+              bookingType: booking.bookingType
+            });
+            
+            // Fetch all player IDs in order (including nulls to preserve order)
+            const playerIdsInOrder = [
+              booking.player1Id,
+              booking.player2Id,
+              booking.player3Id,
+              booking.player4Id
+            ].filter(Boolean) as string[];
+
+            // Fetch player data in batch
+            if (playerIdsInOrder.length > 0) {
+              const { data: playersData, error: playersError } = await supabase
                 .from('Users')
-                .select('Firstname, Surname')
-                .eq('id', booking.player1Id)
-                .maybeSingle();
-              if (user1) {
-                const name = `${user1.Firstname || ''} ${user1.Surname || ''}`.trim();
-                if (name) names.push(name);
+                .select('id, Firstname, Surname')
+                .in('id', playerIdsInOrder);
+
+              if (playersError) {
+                console.error('Error fetching players:', playersError);
+              }
+
+              if (playersData) {
+                // Create a map for quick lookup
+                const playersMap = new Map(playersData.map(p => [p.id, p]));
+                
+                // Add players in order (player1, player2, player3, player4)
+                [booking.player1Id, booking.player2Id, booking.player3Id, booking.player4Id].forEach((playerId, index) => {
+                  if (playerId) {
+                    const playerData = playersMap.get(playerId);
+                    if (playerData) {
+                      const name = `${playerData.Firstname || ''} ${playerData.Surname || ''}`.trim();
+                      if (name) {
+                        players.push({
+                          id: playerId,
+                          name,
+                          isGuest: false,
+                          isPrimary: index === 0 || playerId === booking.userId // Primary player is player1 or the booker
+                        });
+                      } else {
+                        console.warn(`Player ${playerId} has no name (Firstname: ${playerData.Firstname}, Surname: ${playerData.Surname})`);
+                      }
+                    } else {
+                      console.warn(`Player ${playerId} not found in database`);
+                    }
+                  }
+                });
               }
             }
             
-            // Add guest names
-            if (booking.guestPlayer1Name) names.push(booking.guestPlayer1Name);
-            if (booking.guestPlayer2Name) names.push(booking.guestPlayer2Name);
-            if (booking.guestPlayer3Name) names.push(booking.guestPlayer3Name);
+            // Add guest players (these are for non-registered users)
+            if (booking.guestPlayer1Name) {
+              players.push({
+                name: booking.guestPlayer1Name,
+                isGuest: true,
+                isPrimary: false
+              });
+            }
+            if (booking.guestPlayer2Name) {
+              players.push({
+                name: booking.guestPlayer2Name,
+                isGuest: true,
+                isPrimary: false
+              });
+            }
+            if (booking.guestPlayer3Name) {
+              players.push({
+                name: booking.guestPlayer3Name,
+                isGuest: true,
+                isPrimary: false
+              });
+            }
+            
+            // Debug: Log final players array
+            console.log(`Booking ${booking.id} has ${players.length} players:`, players.map(p => p.name));
+            
+            // Create a names string for backwards compatibility
+            const playerNames = players.map(p => p.name).join(', ') || 'Booked';
             
             return {
               ...booking,
-              playerNames: names.length > 0 ? names.join(', ') : 'Booked'
+              players,
+              playerNames
             };
           }));
           
-          setBookings(bookingsWithNames);
+          setBookings(bookingsWithPlayers);
         }
       } catch (err) {
         console.error('Error loading bookings:', err);
@@ -512,7 +585,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                   key={court.id} 
                   className={styles.courtCard}
                   style={{
-                    backgroundColor: '#ffffff',
+                    backgroundColor: isBooked ? selectedColor : '#ffffff',
                     border: isBooked ? `2px solid ${selectedColor}` : 'none',
                     borderRadius: '3px',
                     padding: '16px',
@@ -522,7 +595,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                   <div style={{ 
                     fontSize: '16px', 
                     fontWeight: '600', 
-                    color: '#052333',
+                    color: isBooked ? '#ffffff' : '#052333',
                     marginBottom: '8px',
                     textAlign: 'center'
                   }}>
@@ -530,18 +603,114 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                   </div>
                   
                   {/* Show booking status when court is booked */}
-                  {isBooked && selectedTime && (
+                  {isBooked && selectedTime && booking && (
                     <div style={{
-                      marginTop: '12px',
-                      padding: '8px 12px',
-                      backgroundColor: selectedColor,
-                      color: '#ffffff',
-                      borderRadius: '4px',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      textAlign: 'center'
+                      marginTop: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '12px'
                     }}>
-                      {bookingNames}
+                      {(() => {
+                        // Get players array, fallback to empty array if not available
+                        const players = (booking.players && Array.isArray(booking.players)) 
+                          ? booking.players 
+                          : [];
+                        const isSingles = players.length <= 2;
+                        
+                        // If no players array, show fallback text
+                        if (players.length === 0) {
+                          return (
+                            <div style={{
+                              padding: '8px 12px',
+                              backgroundColor: selectedColor,
+                              color: '#ffffff',
+                              borderRadius: '4px',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              textAlign: 'center'
+                            }}>
+                              {booking.playerNames || 'Booked'}
+                            </div>
+                          );
+                        }
+                        
+                        // Arrange players: singles = 2 columns, doubles = 2x2 grid
+                        return (
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: isSingles ? 'repeat(2, 1fr)' : 'repeat(2, 1fr)',
+                            gap: '16px',
+                            width: '100%',
+                            maxWidth: isSingles ? '200px' : '100%'
+                          }}>
+                            {players.map((player, index) => (
+                              <div
+                                key={index}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  gap: '6px'
+                                }}
+                              >
+                                {/* Player Avatar Circle */}
+                                <div style={{
+                                  position: 'relative',
+                                  width: '48px',
+                                  height: '48px',
+                                  borderRadius: '50%',
+                                  backgroundColor: isBooked ? 'rgba(255, 255, 255, 0.2)' : '#052333',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#ffffff',
+                                  fontSize: '18px',
+                                  fontWeight: '600',
+                                  border: player.isPrimary ? '2px solid #fbbf24' : 'none',
+                                  boxShadow: player.isPrimary ? '0 0 0 2px rgba(251, 191, 36, 0.3)' : 'none'
+                                }}>
+                                  {player.name.charAt(0).toUpperCase()}
+                                  {/* Gold tag for primary player */}
+                                  {player.isPrimary && (
+                                    <div style={{
+                                      position: 'absolute',
+                                      top: '-4px',
+                                      right: '-4px',
+                                      width: '16px',
+                                      height: '16px',
+                                      borderRadius: '50%',
+                                      backgroundColor: '#fbbf24',
+                                      border: '2px solid #ffffff',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '10px',
+                                      fontWeight: '700',
+                                      color: '#052333'
+                                    }}>
+                                      {/* You can add a number here if needed, like "0.3" or "0.1" */}
+                                    </div>
+                                  )}
+                                </div>
+                                {/* Player Name */}
+                                <div style={{
+                                  fontSize: '12px',
+                                  color: isBooked ? '#ffffff' : '#052333',
+                                  textAlign: 'center',
+                                  maxWidth: '80px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  fontWeight: '500'
+                                }}>
+                                  {player.name}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                   
