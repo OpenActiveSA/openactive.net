@@ -93,36 +93,57 @@ BEGIN
             TO authenticated
             USING (true);
         
-        -- Super admins can manage all courts (check both Users and User tables)
-        DECLARE
-            users_table_name TEXT;
-            policy_sql TEXT;
-        BEGIN
-            IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'Users') THEN
-                users_table_name := 'Users';
-            ELSIF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'User') THEN
-                users_table_name := 'User';
-            ELSE
-                users_table_name := NULL;
-            END IF;
+        -- Check if helper functions exist (from FIX_USERCLUBROLES_RLS_RECURSION.sql)
+        -- If they exist, use them; otherwise create basic policies
+        
+        IF EXISTS (SELECT FROM pg_proc WHERE proname = 'is_club_admin_for_club' AND pronamespace = 'public'::regnamespace) THEN
+            -- Use helper functions (preferred - no recursion)
+            CREATE POLICY "Club admins can manage club courts" ON "Courts"
+                FOR ALL
+                TO authenticated
+                USING (is_club_admin_for_club("clubId"))
+                WITH CHECK (is_club_admin_for_club("clubId"));
             
-            IF users_table_name IS NOT NULL THEN
-                policy_sql := format(
-                    'CREATE POLICY "Super admins can manage all courts" ON "Courts"
-                        FOR ALL
-                        TO authenticated
-                        USING (
-                            EXISTS (
-                                SELECT 1 FROM %I
-                                WHERE %I.id::text = auth.uid()::text
-                                AND %I.role = ''SUPER_ADMIN''
-                            )
-                        )',
-                    users_table_name, users_table_name, users_table_name
-                );
-                EXECUTE policy_sql;
+            IF EXISTS (SELECT FROM pg_proc WHERE proname = 'is_super_admin' AND pronamespace = 'public'::regnamespace) THEN
+                CREATE POLICY "Super admins can manage all courts" ON "Courts"
+                    FOR ALL
+                    TO authenticated
+                    USING (is_super_admin())
+                    WITH CHECK (is_super_admin());
             END IF;
-        END;
+        ELSE
+            -- Fallback: Create basic policies without helper functions
+            -- Super admins can manage all courts (check both Users and User tables)
+            DECLARE
+                users_table_name TEXT;
+                policy_sql TEXT;
+            BEGIN
+                IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'Users') THEN
+                    users_table_name := 'Users';
+                ELSIF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'User') THEN
+                    users_table_name := 'User';
+                ELSE
+                    users_table_name := NULL;
+                END IF;
+                
+                IF users_table_name IS NOT NULL THEN
+                    policy_sql := format(
+                        'CREATE POLICY "Super admins can manage all courts" ON "Courts"
+                            FOR ALL
+                            TO authenticated
+                            USING (
+                                EXISTS (
+                                    SELECT 1 FROM %I
+                                    WHERE %I.id::text = auth.uid()::text
+                                    AND %I.role = ''SUPER_ADMIN''
+                                )
+                            )',
+                        users_table_name, users_table_name, users_table_name
+                    );
+                    EXECUTE policy_sql;
+                END IF;
+            END;
+        END IF;
         
         RAISE NOTICE 'RLS policies created for Courts table.';
     END IF;

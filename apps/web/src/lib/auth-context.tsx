@@ -143,7 +143,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    // Return a default context instead of throwing to prevent crashes
+    // This can happen during SSR or if the provider isn't set up yet
+    console.warn('useAuth called outside AuthProvider, returning default values');
+    return {
+      user: null,
+      session: null,
+      loading: false,
+      signOut: async () => {},
+    };
   }
   return context;
 }

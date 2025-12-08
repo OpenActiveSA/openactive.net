@@ -230,9 +230,10 @@
 }
 
 .adminContent {
-  padding: 40px;
+  padding: 20px;
   max-width: 1400px;
   margin: 0 auto;
+  font-size: 13px;
 }
 
 /* Content Sections */
@@ -245,7 +246,7 @@
 }
 
 .sectionHeader {
-  padding: 32px 32px 24px 32px;
+  padding: 16px 20px 12px 20px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -253,14 +254,14 @@
 }
 
 .sectionHeader h1 {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 600;
   color: #ffffff;
   margin: 0 0 4px 0;
 }
 
 .sectionSubtitle {
-  font-size: 14px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
   margin: 0;
 }
@@ -270,15 +271,15 @@
   background: #667eea;
   color: white;
   border: none;
-  padding: 10px 16px;
+  padding: 8px 12px;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-family: 'Poppins', sans-serif;
 }
 
@@ -292,15 +293,15 @@
   background: transparent;
   color: #667eea;
   border: 1px solid #667eea;
-  padding: 10px 16px;
+  padding: 8px 12px;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-family: 'Poppins', sans-serif;
 }
 
@@ -315,7 +316,7 @@
 
 /* Toolbar */
 .toolbar {
-  padding: 20px 32px;
+  padding: 12px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   gap: 12px;
@@ -338,10 +339,10 @@
 
 .searchBox input {
   width: 100%;
-  padding: 10px 12px 10px 40px;
+  padding: 8px 10px 8px 36px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
   font-family: 'Poppins', sans-serif;
   transition: all 0.2s;
   background: rgba(255, 255, 255, 0.05);
@@ -367,7 +368,7 @@
 .dataTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .dataTable thead {
@@ -376,19 +377,20 @@
 }
 
 .dataTable th {
-  padding: 12px 32px;
+  padding: 10px 16px;
   text-align: left;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .dataTable td {
-  padding: 16px 32px;
+  padding: 12px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
 }
 
 .dataTable tbody tr:hover {
@@ -458,13 +460,13 @@
 .clubsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
-  padding: 32px;
+  gap: 16px;
+  padding: 20px;
 }
 
 .clubCard {
   border-radius: 4px;
-  padding: 24px;
+  padding: 16px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.2s;
@@ -483,7 +485,7 @@
 }
 
 .clubCard h3 {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
   color: #ffffff;
   margin: 0;
@@ -499,9 +501,19 @@
   letter-spacing: 0.5px;
 }
 
-.statusActive {
+.statusActivePaid {
   background: rgba(16, 185, 129, 0.2);
   color: #6ee7b7;
+}
+
+.statusActiveFree {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.statusFreeTrial {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fcd34d;
 }
 
 .statusInactive {
@@ -509,10 +521,16 @@
   color: #fca5a5;
 }
 
+/* Keep old class for backwards compatibility */
+.statusActive {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+
 .clubDescription {
   color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
-  margin: 0 0 16px 0;
+  font-size: 13px;
+  margin: 0 0 12px 0;
   line-height: 1.5;
 }
 
@@ -594,18 +612,18 @@
 .statsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-  padding: 32px;
+  gap: 16px;
+  padding: 20px;
 }
 
 .statCard {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
-  padding: 24px;
+  padding: 16px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .statIcon {
@@ -644,14 +662,14 @@
 }
 
 .statContent h3 {
-  font-size: 32px;
+  font-size: 24px;
   font-weight: 700;
   color: #ffffff;
   margin: 0 0 4px 0;
 }
 
 .statContent p {
-  font-size: 14px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
   margin: 0;
 }

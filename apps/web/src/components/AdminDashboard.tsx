@@ -17,13 +17,16 @@ interface User {
   createdAt?: string;
 }
 
+type ClubStatus = 'ACTIVE_PAID' | 'ACTIVE_FREE' | 'FREE_TRIAL' | 'DISABLED';
+
 interface Club {
   id: string;
   name: string;
   numberOfCourts?: number;
   country?: string;
   province?: string;
-  is_active?: boolean;
+  is_active?: boolean; // Keep for backwards compatibility
+  status?: ClubStatus;
   createdAt?: string;
 }
 
@@ -60,17 +63,39 @@ export function AdminDashboard() {
 
       setUsers((usersData || []) as User[]);
 
-      // Load clubs
-      const { data: clubsData, error: clubsError } = await supabase
+      // Load clubs - try with status first, fallback to without status if column doesn't exist
+      let clubsData, clubsError;
+      const resultWithStatus = await supabase
         .from('Clubs')
-        .select('id, name, country, province, is_active, createdAt')
+        .select('id, name, country, province, is_active, status, createdAt')
         .order('createdAt', { ascending: false });
+      
+      clubsData = resultWithStatus.data;
+      clubsError = resultWithStatus.error;
+
+      // If error is about missing column (status), try without it
+      if (clubsError && (clubsError.code === '42703' || clubsError.message?.includes('column') || clubsError.message?.includes('status'))) {
+        console.warn('Status column not found, loading clubs without status field');
+        const resultWithoutStatus = await supabase
+          .from('Clubs')
+          .select('id, name, country, province, is_active, createdAt')
+          .order('createdAt', { ascending: false });
+        
+        clubsData = resultWithoutStatus.data;
+        clubsError = resultWithoutStatus.error;
+      }
 
       if (clubsError) {
-        console.error('Error loading clubs:', clubsError);
+        console.error('Error loading clubs:', {
+          code: clubsError.code,
+          message: clubsError.message,
+          details: clubsError.details,
+          hint: clubsError.hint,
+          fullError: clubsError
+        });
         // Don't throw error if table doesn't exist yet, just log it
         if (clubsError.code !== '42P01') {
-          throw new Error('Failed to load clubs');
+          throw new Error(`Failed to load clubs: ${clubsError.message || 'Unknown error'}`);
         }
         setClubs([]);
       } else {
@@ -311,13 +336,100 @@ export function AdminDashboard() {
 }
 
 function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
+  const [clubsWithCourtCounts, setClubsWithCourtCounts] = useState<Array<Club & { courtCount?: number }>>(clubs);
+  const [isLoadingCourtCounts, setIsLoadingCourtCounts] = useState(false);
+
+  useEffect(() => {
+    const loadCourtCounts = async () => {
+      if (clubs.length === 0) return;
+      
+      setIsLoadingCourtCounts(true);
+      try {
+        const supabase = getSupabaseClientClient();
+        const { data: courtsData } = await supabase
+          .from('Courts')
+          .select('clubId')
+          .eq('isActive', true);
+        
+        if (courtsData) {
+          const courtCounts = courtsData.reduce((acc, court) => {
+            acc[court.clubId] = (acc[court.clubId] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          
+          setClubsWithCourtCounts(clubs.map(club => ({
+            ...club,
+            courtCount: courtCounts[club.id] || 0
+          })));
+        }
+      } catch (err) {
+        console.error('Error loading court counts:', err);
+        setClubsWithCourtCounts(clubs);
+      } finally {
+        setIsLoadingCourtCounts(false);
+      }
+    };
+    
+    loadCourtCounts();
+  }, [clubs]);
+
+  const getClubStatus = (club: Club): ClubStatus => {
+    if (club.status) {
+      return club.status;
+    }
+    // Fallback to is_active for backwards compatibility
+    return club.is_active ? 'ACTIVE_FREE' : 'DISABLED';
+  };
+
+  const getStatusLabel = (status: ClubStatus): string => {
+    switch (status) {
+      case 'ACTIVE_PAID':
+        return 'Active Paid';
+      case 'ACTIVE_FREE':
+        return 'Active Free';
+      case 'FREE_TRIAL':
+        return 'Free Trial';
+      case 'DISABLED':
+        return 'Disabled';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  const getStatusBadgeClass = (status: ClubStatus): string => {
+    switch (status) {
+      case 'ACTIVE_PAID':
+        return `${styles.statusBadge} ${styles.statusActivePaid}`;
+      case 'ACTIVE_FREE':
+        return `${styles.statusBadge} ${styles.statusActiveFree}`;
+      case 'FREE_TRIAL':
+        return `${styles.statusBadge} ${styles.statusFreeTrial}`;
+      case 'DISABLED':
+        return `${styles.statusBadge} ${styles.statusInactive}`;
+      default:
+        return styles.statusBadge;
+    }
+  };
+
   const stats = {
     totalUsers: users.length,
     totalClubs: clubs.length,
-    activeClubs: clubs.filter((c) => c.is_active).length,
+    activeClubs: clubs.filter((c) => {
+      const status = getClubStatus(c);
+      return status === 'ACTIVE_PAID' || status === 'ACTIVE_FREE' || status === 'FREE_TRIAL';
+    }).length,
     superAdmins: users.filter((u) => u.role === 'SUPER_ADMIN').length,
     clubAdmins: users.filter((u) => u.role === 'CLUB_ADMIN').length,
     members: users.filter((u) => u.role === 'MEMBER').length,
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
   return (
@@ -327,6 +439,95 @@ function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
           <h1>Overview</h1>
           <p className={styles.sectionSubtitle}>System dashboard and key metrics</p>
         </div>
+      </div>
+
+      {/* Clubs Table Section - Moved to top */}
+      <div style={{ marginBottom: '40px' }}>
+        {clubs.length === 0 ? (
+          <div className={styles.emptyState}>
+            <p>No clubs found.</p>
+          </div>
+        ) : (
+          <div className={styles.tableContainer} style={{ marginTop: '20px' }}>
+            <table className={styles.dataTable}>
+              <thead>
+                <tr>
+                  <th>Club Name</th>
+                  <th>Location</th>
+                  <th>Courts</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clubsWithCourtCounts.map((club) => (
+                  <tr key={club.id}>
+                    <td>
+                      <span style={{ fontWeight: 500 }}>{club.name}</span>
+                    </td>
+                    <td>
+                      {[club.province, club.country].filter(Boolean).join(', ') || '—'}
+                    </td>
+                    <td>
+                      {isLoadingCourtCounts ? (
+                        <span style={{ opacity: 0.6 }}>Loading...</span>
+                      ) : (
+                        <span>{club.courtCount || 0}</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className={getStatusBadgeClass(getClubStatus(club))}>
+                        {getStatusLabel(getClubStatus(club))}
+                      </span>
+                    </td>
+                    <td className={styles.dateCell}>{formatDate(club.createdAt)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <Link 
+                          href={`/club/${generateSlug(club.name)}`}
+                          className={styles.btnView}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ 
+                            padding: '6px 12px', 
+                            fontSize: '13px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                          </svg>
+                          View
+                        </Link>
+                        <Link 
+                          href={`/admin/clubs/${club.id}/edit`}
+                          className={styles.btnEdit}
+                          style={{ 
+                            padding: '6px 12px', 
+                            fontSize: '13px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                          Manage
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className={styles.statsGrid}>
@@ -555,6 +756,43 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
   const [error, setError] = useState('');
   const supabase = getSupabaseClientClient();
 
+  const getClubStatus = (club: Club): ClubStatus => {
+    if (club.status) {
+      return club.status;
+    }
+    return club.is_active ? 'ACTIVE_FREE' : 'DISABLED';
+  };
+
+  const getStatusLabel = (status: ClubStatus): string => {
+    switch (status) {
+      case 'ACTIVE_PAID':
+        return 'Active Paid';
+      case 'ACTIVE_FREE':
+        return 'Active Free';
+      case 'FREE_TRIAL':
+        return 'Free Trial';
+      case 'DISABLED':
+        return 'Disabled';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  const getStatusBadgeClass = (status: ClubStatus): string => {
+    switch (status) {
+      case 'ACTIVE_PAID':
+        return `${styles.statusBadge} ${styles.statusActivePaid}`;
+      case 'ACTIVE_FREE':
+        return `${styles.statusBadge} ${styles.statusActiveFree}`;
+      case 'FREE_TRIAL':
+        return `${styles.statusBadge} ${styles.statusFreeTrial}`;
+      case 'DISABLED':
+        return `${styles.statusBadge} ${styles.statusInactive}`;
+      default:
+        return styles.statusBadge;
+    }
+  };
+
   const filteredClubs = clubs.filter((club) =>
     club.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -688,11 +926,9 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
             <div key={club.id} className={styles.clubCard}>
               <div className={styles.clubCardHeader}>
                 <h3>{club.name}</h3>
-                {club.is_active !== undefined && (
-                  <span className={`${styles.statusBadge} ${club.is_active ? styles.statusActive : styles.statusInactive}`}>
-                    {club.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                )}
+                <span className={getStatusBadgeClass(getClubStatus(club))}>
+                  {getStatusLabel(getClubStatus(club))}
+                </span>
               </div>
               <p className={styles.clubDescription}>
                 {club.numberOfCourts || 0} {club.numberOfCourts === 1 ? 'court' : 'courts'}

@@ -1098,8 +1098,35 @@ export default function PlayerSelectionPage() {
             </button>
             <button
               onClick={() => {
-                // TODO: Navigate to next step or create booking
-                console.log('Next step', { bookingType, selectedPlayers, court, date, time, duration });
+                // Prepare players data for navigation
+                const playersData = selectedPlayers
+                  .filter(p => p !== null)
+                  .map(p => ({
+                    id: p?.id || '',
+                    name: p?.name || '',
+                    email: p?.email || '',
+                    isGuest: p === null || !p.id
+                  }));
+                
+                // Build URL params for confirm page
+                const params = new URLSearchParams({
+                  courtId: searchParams.get('courtId') || searchParams.get('court') || '',
+                  court: court || '',
+                  date: date || '',
+                  duration: duration || '',
+                  bookingType: bookingType
+                });
+                
+                if (time) {
+                  params.set('time', time);
+                }
+                
+                // Add players as JSON in URL
+                if (playersData.length > 0) {
+                  params.set('players', encodeURIComponent(JSON.stringify(playersData)));
+                }
+                
+                router.push(`/club/${slug}/confirm?${params.toString()}`);
               }}
               style={{
                 flex: 1,

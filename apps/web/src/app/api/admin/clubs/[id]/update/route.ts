@@ -26,9 +26,22 @@ export async function PUT(
       name: body.name.trim(),
       country: body.country && body.country.trim() ? body.country.trim() : null,
       province: body.province && body.province.trim() ? body.province.trim() : null,
-      is_active: body.is_active !== undefined ? body.is_active : true,
       updatedAt: new Date().toISOString(),
     };
+
+    // Add status if provided, otherwise use is_active for backwards compatibility
+    if (body.status) {
+      updateData.status = body.status;
+      // Update is_active based on status for backwards compatibility
+      updateData.is_active = body.status !== 'DISABLED';
+    } else if (body.is_active !== undefined) {
+      updateData.is_active = body.is_active;
+      // Set status based on is_active if status not provided
+      updateData.status = body.is_active ? 'ACTIVE_FREE' : 'DISABLED';
+    } else {
+      updateData.is_active = true;
+      updateData.status = 'ACTIVE_FREE';
+    }
 
     // Add branding fields if provided (only if they exist in the request)
     // We'll try to update them, but if columns don't exist, we'll handle it gracefully

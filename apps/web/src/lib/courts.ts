@@ -56,14 +56,12 @@ export async function getClubCourts(
   includeInactive: boolean = false
 ): Promise<Court[]> {
   try {
-    // First, try a simple query to check if table exists
-    // If it fails, we'll return empty array gracefully
+    // Build query to fetch all courts for the club
     let query = supabase
       .from('Courts')
       .select('*')
       .eq('clubId', clubId)
-      .order('name', { ascending: true })
-      .limit(1); // Limit to 1 initially to test if table exists
+      .order('name', { ascending: true });
 
     if (!includeInactive) {
       query = query.eq('isActive', true);
@@ -114,8 +112,6 @@ export async function getClubCourts(
     }
     
     // Success - return the data
-    return (data || []) as Court[];
-
     return (data || []) as Court[];
   } catch (err: any) {
     console.error('Exception fetching club courts:', {
@@ -179,16 +175,24 @@ export async function createCourt(
       const errorStatus = error?.status;
       const errorStatusText = error?.statusText;
       
-      // Log everything we can find
+      // Log everything we can find - use a single console.error with all info
+      const errorInfo = {
+        code: errorCode || 'NO_CODE',
+        message: errorMessage || 'NO_MESSAGE',
+        details: errorDetails || 'NO_DETAILS',
+        hint: errorHint || 'NO_HINT',
+        status: errorStatus || 'NO_STATUS',
+        statusText: errorStatusText || 'NO_STATUS_TEXT',
+        errorType: typeof error,
+        constructor: error?.constructor?.name || 'NO_CONSTRUCTOR',
+        fullError: error
+      };
+      
+      console.error('Error creating court - Full Details:', JSON.stringify(errorInfo, null, 2));
       console.error('Error code:', errorCode);
       console.error('Error message:', errorMessage);
       console.error('Error details:', errorDetails);
       console.error('Error hint:', errorHint);
-      console.error('Error status:', errorStatus);
-      console.error('Error statusText:', errorStatusText);
-      console.error('Error object:', error);
-      console.error('Error type:', typeof error);
-      console.error('Error constructor:', error?.constructor?.name);
       
       // Try to get all enumerable properties
       if (error && typeof error === 'object') {
@@ -249,8 +253,10 @@ export async function createCourt(
       } else if (errorCode === '23505' || 
                  errorMessage?.toLowerCase().includes('duplicate') || 
                  errorMessage?.toLowerCase().includes('unique') ||
-                 errorDetails?.toLowerCase().includes('duplicate')) {
-        userFriendlyMessage = 'A court with this name already exists for this club. Please choose a different name.';
+                 errorDetails?.toLowerCase().includes('duplicate') ||
+                 errorDetails?.toLowerCase().includes('Courts_clubId_name_key') ||
+                 errorHint?.toLowerCase().includes('Courts_clubId_name_key')) {
+        userFriendlyMessage = 'A court with this name already exists for this club. You can use the same name for courts in different clubs, but each club must have unique court names. Please choose a different name for this club.';
       } else if (errorCode === '42501' || 
                  errorCode === 'PGRST301' ||
                  errorMessage?.toLowerCase().includes('permission') || 

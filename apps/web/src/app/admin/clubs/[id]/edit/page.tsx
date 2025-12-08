@@ -21,13 +21,16 @@ interface EditClubProps {
   params: Promise<{ id: string }>;
 }
 
+type ClubStatus = 'ACTIVE_PAID' | 'ACTIVE_FREE' | 'FREE_TRIAL' | 'DISABLED';
+
 interface Club {
   id: string;
   name: string;
   numberOfCourts?: number;
   country?: string;
   province?: string;
-  is_active?: boolean;
+  is_active?: boolean; // Keep for backwards compatibility
+  status?: ClubStatus;
   logo?: string;
   backgroundImage?: string;
   backgroundColor?: string;
@@ -76,7 +79,8 @@ export default function EditClubPage({ params }: EditClubProps) {
   const [numberOfCourts, setNumberOfCourts] = useState<number>(1);
   const [country, setCountry] = useState('');
   const [province, setProvince] = useState('');
-  const [isActive, setIsActive] = useState(true);
+  const [status, setStatus] = useState<ClubStatus>('ACTIVE_FREE');
+  const [isActive, setIsActive] = useState(true); // Keep for backwards compatibility
   const [logo, setLogo] = useState('');
   const [backgroundImage, setBackgroundImage] = useState('');
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
@@ -162,30 +166,43 @@ export default function EditClubPage({ params }: EditClubProps) {
         return;
       }
 
-      // Try to fetch with all columns first, if that fails, try without branding columns
+      // Try to fetch with all columns first, if that fails, try without branding columns or status
       let data, fetchError;
       
-      // First attempt: with all columns including branding
+      // First attempt: with all columns including branding and status
       const result = await supabase
         .from('Clubs')
-        .select('id, name, country, province, is_active, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
+        .select('id, name, country, province, is_active, status, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
         .eq('id', id)
         .single();
       
       data = result.data;
       fetchError = result.error;
 
-      // If error and it's about missing columns, try without branding columns
+      // If error and it's about missing columns, try without branding columns (but keep status)
       if (fetchError && (fetchError.code === '42703' || fetchError.message?.includes('column'))) {
-        console.warn('Branding columns may not exist, trying without them:', fetchError);
+        console.warn('Some columns may not exist, trying without branding columns:', fetchError);
         const fallbackResult = await supabase
           .from('Clubs')
-          .select('id, name, country, province, is_active, createdAt')
+          .select('id, name, country, province, is_active, status, createdAt')
           .eq('id', id)
           .single();
         
         data = fallbackResult.data;
         fetchError = fallbackResult.error;
+
+        // If still error and it's about status column, try without status
+        if (fetchError && (fetchError.code === '42703' || fetchError.message?.includes('status'))) {
+          console.warn('Status column does not exist, loading without it:', fetchError);
+          const fallbackResult2 = await supabase
+            .from('Clubs')
+            .select('id, name, country, province, is_active, createdAt')
+            .eq('id', id)
+            .single();
+          
+          data = fallbackResult2.data;
+          fetchError = fallbackResult2.error;
+        }
       }
 
       if (fetchError) {
@@ -194,10 +211,16 @@ export default function EditClubPage({ params }: EditClubProps) {
           code: fetchError.code,
           details: fetchError.details,
           hint: fetchError.hint,
-          error: fetchError
+          fullError: fetchError
         });
-        setError(`Failed to load club: ${fetchError.message || 'Unknown error'}. Code: ${fetchError.code || 'N/A'}`);
+        // Don't throw error if table doesn't exist, just show message
+        if (fetchError.code === '42P01') {
+          setError('Clubs table does not exist. Please run the database migrations.');
+        } else {
+          setError(`Failed to load club: ${fetchError.message || 'Unknown error'}. Code: ${fetchError.code || 'N/A'}`);
+        }
         setIsLoading(false);
+        hasLoadedRef.current = false; // Allow retry
         return;
       }
 
@@ -212,6 +235,12 @@ export default function EditClubPage({ params }: EditClubProps) {
       setNumberOfCourts(data.numberOfCourts || 1);
       setCountry(data.country || '');
       setProvince(data.province || '');
+      // Set status, fallback to is_active for backwards compatibility
+      if (data.status) {
+        setStatus(data.status);
+      } else {
+        setStatus(data.is_active !== undefined && data.is_active ? 'ACTIVE_FREE' : 'DISABLED');
+      }
       setIsActive(data.is_active !== undefined ? data.is_active : true);
       setLogo((data as any).logo || '');
       setBackgroundImage((data as any).backgroundImage || '');
@@ -459,6 +488,7 @@ export default function EditClubPage({ params }: EditClubProps) {
               numberOfCourts: numberOfCourts,
               country: country,
               province: province,
+              status: status,
               is_active: isActive,
               logo: urlData.publicUrl,
               backgroundImage: backgroundImage,
@@ -565,6 +595,7 @@ export default function EditClubPage({ params }: EditClubProps) {
               numberOfCourts: numberOfCourts,
               country: country,
               province: province,
+              status: status,
               is_active: isActive,
               logo: logo,
               backgroundImage: urlData.publicUrl,
@@ -650,7 +681,9 @@ export default function EditClubPage({ params }: EditClubProps) {
         name: clubName.trim(),
         country: country && country.trim() ? country.trim() : null,
         province: province && province.trim() ? province.trim() : null,
-        is_active: isActive,
+        status: status,
+        // Update is_active based on status for backwards compatibility
+        is_active: status !== 'DISABLED',
         updatedAt: new Date().toISOString(),
       };
 
@@ -1231,16 +1264,19 @@ export default function EditClubPage({ params }: EditClubProps) {
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={isActive}
-                      onChange={(e) => setIsActive(e.target.checked)}
-                      disabled={isSubmitting}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                    />
-                    <span>Active</span>
-                  </label>
+                  <label htmlFor="status">Status</label>
+                  <select
+                    id="status"
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as ClubStatus)}
+                    disabled={isSubmitting}
+                    className={styles.formInput}
+                  >
+                    <option value="ACTIVE_PAID">Active Paid</option>
+                    <option value="ACTIVE_FREE">Active Free</option>
+                    <option value="FREE_TRIAL">Free Trial</option>
+                    <option value="DISABLED">Disabled</option>
+                  </select>
                 </div>
               </div>
 

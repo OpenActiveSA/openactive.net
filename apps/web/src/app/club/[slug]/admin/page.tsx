@@ -69,6 +69,28 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
     status: 'active' | 'pause';
     setting: 'blocked' | 'blocked-coaching' | 'blocked-tournament' | 'blocked-maintenance' | 'blocked-social' | 'members-only' | 'members-only-bookings' | 'open-doubles-singles' | 'doubles-only' | 'singles-only';
   } | null>(null);
+  const [bookings, setBookings] = useState<Array<{
+    id: string;
+    courtId?: string;
+    courtNumber?: number;
+    courtName?: string;
+    bookingDate: string;
+    startTime: string;
+    endTime: string;
+    duration: number;
+    player1Id?: string;
+    player2Id?: string;
+    player3Id?: string;
+    player4Id?: string;
+    guestPlayer1Name?: string;
+    guestPlayer2Name?: string;
+    guestPlayer3Name?: string;
+    playerNames: string;
+    status: string;
+    bookingType: string;
+    createdAt: string;
+  }>>([]);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(false);
   const hasLoadedRef = useRef(false);
   const mountedRef = useRef(true);
   
@@ -226,6 +248,116 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
     loadClubData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id, session?.user?.id]);
+
+  // Load bookings for the club
+  const loadBookings = useCallback(async () => {
+    if (!club?.id) {
+      return;
+    }
+
+    setIsLoadingBookings(true);
+    try {
+      const supabase = getSupabaseClientClient();
+      
+      // Fetch bookings for this club, ordered by date and time
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('Bookings')
+        .select(`
+          id,
+          courtId,
+          courtNumber,
+          bookingDate,
+          startTime,
+          endTime,
+          duration,
+          player1Id,
+          player2Id,
+          player3Id,
+          player4Id,
+          guestPlayer1Name,
+          guestPlayer2Name,
+          guestPlayer3Name,
+          status,
+          bookingType,
+          createdAt
+        `)
+        .eq('clubId', club.id)
+        .order('bookingDate', { ascending: false })
+        .order('startTime', { ascending: false })
+        .limit(100); // Limit to recent 100 bookings
+
+      if (bookingsError) {
+        console.error('Error loading bookings:', bookingsError);
+        setBookings([]);
+        return;
+      }
+
+      // Fetch court names and player names
+      const bookingsWithDetails = await Promise.all((bookingsData || []).map(async (booking) => {
+        const names: string[] = [];
+        
+        // Get court name
+        let courtName = `Court ${booking.courtNumber || 'N/A'}`;
+        if (booking.courtId) {
+          const { data: courtData } = await supabase
+            .from('Courts')
+            .select('name')
+            .eq('id', booking.courtId)
+            .maybeSingle();
+          if (courtData?.name) {
+            courtName = courtData.name;
+          }
+        }
+        
+        // Fetch player names
+        const playerIds = [
+          booking.player1Id,
+          booking.player2Id,
+          booking.player3Id,
+          booking.player4Id
+        ].filter(Boolean) as string[];
+
+        if (playerIds.length > 0) {
+          const { data: playersData } = await supabase
+            .from('Users')
+            .select('id, Firstname, Surname')
+            .in('id', playerIds);
+
+          if (playersData) {
+            playersData.forEach((player) => {
+              const name = `${player.Firstname || ''} ${player.Surname || ''}`.trim();
+              if (name) names.push(name);
+            });
+          }
+        }
+        
+        // Add guest names
+        if (booking.guestPlayer1Name) names.push(booking.guestPlayer1Name);
+        if (booking.guestPlayer2Name) names.push(booking.guestPlayer2Name);
+        if (booking.guestPlayer3Name) names.push(booking.guestPlayer3Name);
+        
+        return {
+          ...booking,
+          courtName,
+          playerNames: names.length > 0 ? names.join(', ') : 'No players'
+        };
+      }));
+
+      setBookings(bookingsWithDetails);
+    } catch (err) {
+      console.error('Error loading bookings:', err);
+      setBookings([]);
+    } finally {
+      setIsLoadingBookings(false);
+    }
+  }, [club?.id]);
+
+  // Load bookings when bookings tab is active
+  useEffect(() => {
+    if (activeTab === 'bookings' && club?.id) {
+      loadBookings();
+    }
+  }, [activeTab, club?.id, loadBookings]);
 
   // Show loading state
   if (authLoading || isLoading) {
@@ -1061,9 +1193,117 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                   <h1>Bookings</h1>
                   <p className={styles.sectionSubtitle}>Manage club bookings</p>
                 </div>
+                <button
+                  onClick={loadBookings}
+                  disabled={isLoadingBookings}
+                  className={styles.btnSecondary}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  {isLoadingBookings ? 'Refreshing...' : 'Refresh'}
+                </button>
               </div>
               <div style={{ padding: '32px' }}>
-                <p>Booking management coming soon...</p>
+                {isLoadingBookings ? (
+                  <div style={{ textAlign: 'center', padding: '40px' }}>
+                    <div className={styles.spinner}></div>
+                    <p style={{ marginTop: '16px', color: 'rgba(255, 255, 255, 0.7)' }}>Loading bookings...</p>
+                  </div>
+                ) : bookings.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                    <p>No bookings found.</p>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px', overflow: 'hidden' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600, fontSize: '13px' }}>Date</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600, fontSize: '13px' }}>Time</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600, fontSize: '13px' }}>Court</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600, fontSize: '13px' }}>Duration</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600, fontSize: '13px' }}>Players</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600, fontSize: '13px' }}>Type</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600, fontSize: '13px' }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bookings.map((booking) => {
+                          const date = new Date(booking.bookingDate);
+                          const formattedDate = date.toLocaleDateString('en-US', { 
+                            weekday: 'short', 
+                            year: 'numeric', 
+                            month: 'short', 
+                            day: 'numeric' 
+                          });
+                          const statusColors: Record<string, string> = {
+                            pending: 'rgba(251, 191, 36, 0.2)',
+                            confirmed: 'rgba(34, 197, 94, 0.2)',
+                            cancelled: 'rgba(239, 68, 68, 0.2)',
+                            completed: 'rgba(59, 130, 246, 0.2)',
+                            no_show: 'rgba(156, 163, 175, 0.2)'
+                          };
+                          const statusTextColors: Record<string, string> = {
+                            pending: '#fbbf24',
+                            confirmed: '#22c55e',
+                            cancelled: '#ef4444',
+                            completed: '#3b82f6',
+                            no_show: '#9ca3af'
+                          };
+                          
+                          return (
+                            <tr 
+                              key={booking.id} 
+                              style={{ 
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                                transition: 'background-color 0.2s'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                              }}
+                            >
+                              <td style={{ padding: '12px 16px', color: 'rgba(255, 255, 255, 0.9)', fontSize: '13px' }}>
+                                {formattedDate}
+                              </td>
+                              <td style={{ padding: '12px 16px', color: 'rgba(255, 255, 255, 0.9)', fontSize: '13px' }}>
+                                {booking.startTime} - {booking.endTime}
+                              </td>
+                              <td style={{ padding: '12px 16px', color: 'rgba(255, 255, 255, 0.9)', fontSize: '13px', fontWeight: 500 }}>
+                                {booking.courtName}
+                              </td>
+                              <td style={{ padding: '12px 16px', color: 'rgba(255, 255, 255, 0.9)', fontSize: '13px' }}>
+                                {booking.duration} min
+                              </td>
+                              <td style={{ padding: '12px 16px', color: 'rgba(255, 255, 255, 0.9)', fontSize: '13px' }}>
+                                {booking.playerNames}
+                              </td>
+                              <td style={{ padding: '12px 16px', color: 'rgba(255, 255, 255, 0.9)', fontSize: '13px', textTransform: 'capitalize' }}>
+                                {booking.bookingType || 'singles'}
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '13px' }}>
+                                <span
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    backgroundColor: statusColors[booking.status] || 'rgba(255, 255, 255, 0.1)',
+                                    color: statusTextColors[booking.status] || 'rgba(255, 255, 255, 0.9)',
+                                    fontWeight: 500,
+                                    textTransform: 'capitalize',
+                                    fontSize: '12px'
+                                  }}
+                                >
+                                  {booking.status}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
