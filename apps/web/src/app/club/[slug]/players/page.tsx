@@ -130,7 +130,7 @@ export default function PlayerSelectionPage() {
             const name = data.Firstname && data.Surname 
               ? `${data.Firstname} ${data.Surname}`
               : data.Firstname || data.Surname || data.email?.split('@')[0] || 'User';
-            setSelectedPlayers([{ id: data.id, name }, null, null, null]);
+            setSelectedPlayers([{ id: data.id, name, email: data.email || '' }, null, null, null]);
           }
         });
     }
