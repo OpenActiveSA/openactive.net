@@ -21,7 +21,7 @@ The club roles system allows users to have different roles at different clubs. T
      - `id`: UUID primary key
      - `userId`: UUID foreign key to Users
      - `clubId`: UUID foreign key to Clubs
-     - `role`: ClubRole enum (VISITOR, MEMBER, CLUB_ADMIN)
+     - `role`: ClubRole enum (VISITOR, MEMBER, COACH, CLUB_ADMIN)
      - `createdAt`, `updatedAt`: Timestamps
 
 ### Role Types
@@ -32,6 +32,7 @@ The club roles system allows users to have different roles at different clubs. T
 **Club-Specific Roles** (in UserClubRoles table):
 - `VISITOR`: Default role - no record needed (absence = visitor)
 - `MEMBER`: Regular member of the club
+- `COACH`: Coach of the club
 - `CLUB_ADMIN`: Administrator of a specific club
 
 ## Default Behavior
@@ -53,7 +54,7 @@ import { getSupabaseClientClient } from '@/lib/supabase';
 
 const supabase = getSupabaseClientClient();
 const role = await getUserClubRole(supabase, userId, clubId);
-// Returns: 'VISITOR' | 'MEMBER' | 'CLUB_ADMIN'
+// Returns: 'VISITOR' | 'MEMBER' | 'COACH' | 'CLUB_ADMIN'
 ```
 
 ### Set User's Role at a Club
@@ -63,6 +64,9 @@ import { setUserClubRole } from '@/lib/club-roles';
 
 // Make user a member
 await setUserClubRole(supabase, userId, clubId, 'MEMBER');
+
+// Make user a coach
+await setUserClubRole(supabase, userId, clubId, 'COACH');
 
 // Make user a club admin
 await setUserClubRole(supabase, userId, clubId, 'CLUB_ADMIN');

@@ -8,7 +8,8 @@ import { generateSlug } from '@/lib/slug-utils';
 interface Club {
   id: string;
   name: string;
-  numberOfCourts?: number;
+  numberOfCourts?: number; // Keep for backwards compatibility
+  courtCount?: number; // New: actual count from Courts table
   country?: string;
   province?: string;
   logo?: string;
@@ -406,7 +407,7 @@ export default function ClubsListClient({ clubs }: ClubsListClientProps) {
                         <line x1="3" y1="12" x2="21" y2="12"></line>
                       </svg>
                       <span style={{ color: 'white', fontSize: '14px', fontWeight: '600' }}>
-                        {club.numberOfCourts || 0}
+                        {club.courtCount || club.numberOfCourts || 0}
                       </span>
                     </div>
                     

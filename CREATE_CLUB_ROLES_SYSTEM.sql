@@ -3,7 +3,7 @@
 -- Run this in Supabase SQL Editor: https://supabase.com/dashboard → SQL Editor
 -- 
 -- This creates:
--- 1. ClubRole enum (VISITOR, MEMBER, CLUB_ADMIN) for club-specific roles
+-- 1. ClubRole enum (VISITOR, MEMBER, COACH, CLUB_ADMIN) for club-specific roles
 -- 2. UserClubRoles junction table to store user roles per club
 -- 3. VISITOR is the default (no record needed - absence = visitor)
 -- ============================================================================
@@ -14,7 +14,7 @@ BEGIN;
 DO $$ 
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ClubRole') THEN
-        CREATE TYPE "ClubRole" AS ENUM ('VISITOR', 'MEMBER', 'CLUB_ADMIN');
+        CREATE TYPE "ClubRole" AS ENUM ('VISITOR', 'MEMBER', 'COACH', 'CLUB_ADMIN');
         RAISE NOTICE 'ClubRole enum created successfully!';
     ELSE
         RAISE NOTICE 'ClubRole enum already exists.';
@@ -27,7 +27,7 @@ BEGIN
     IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'UserClubRoles') THEN
         CREATE TABLE "UserClubRoles" (
             "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-            "userId" UUID NOT NULL,
+            "userId" TEXT NOT NULL,
             "clubId" UUID NOT NULL,
             "role" "ClubRole" NOT NULL DEFAULT 'VISITOR',
             "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -48,10 +48,10 @@ BEGIN
     END IF;
 END $$;
 
--- Step 3: Add foreign key constraints if Users and Clubs tables exist
+-- Step 3: Add foreign key constraints if Users/User and Clubs tables exist
 DO $$ 
 BEGIN
-    -- Add foreign key to Users table if it exists
+    -- Add foreign key to Users table (plural) if it exists
     IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'Users') THEN
         -- Check if constraint doesn't already exist
         IF NOT EXISTS (
@@ -62,6 +62,18 @@ BEGIN
             ADD CONSTRAINT "UserClubRoles_userId_fkey" 
             FOREIGN KEY ("userId") REFERENCES "Users"("id") ON DELETE CASCADE;
             RAISE NOTICE 'Foreign key to Users table added.';
+        END IF;
+    -- Add foreign key to User table (singular) if it exists and Users doesn't
+    ELSIF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'User') THEN
+        -- Check if constraint doesn't already exist
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'UserClubRoles_userId_fkey'
+        ) THEN
+            ALTER TABLE "UserClubRoles" 
+            ADD CONSTRAINT "UserClubRoles_userId_fkey" 
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE;
+            RAISE NOTICE 'Foreign key to User table added.';
         END IF;
     END IF;
     
@@ -85,6 +97,9 @@ ALTER TABLE "UserClubRoles" ENABLE ROW LEVEL SECURITY;
 
 -- Step 5: Create RLS Policies
 DO $$ 
+DECLARE
+    users_table_name TEXT;
+    policy_sql TEXT;
 BEGIN
     IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'UserClubRoles') THEN
         -- Drop existing policies if they exist
@@ -119,16 +134,35 @@ BEGIN
             );
         
         -- Super admins can manage all club roles
-        CREATE POLICY "Super admins can manage all club roles" ON "UserClubRoles"
-            FOR ALL
-            TO authenticated
-            USING (
-                EXISTS (
-                    SELECT 1 FROM "Users"
-                    WHERE "Users".id::text = auth.uid()::text
-                    AND "Users".role = 'SUPER_ADMIN'
-                )
+        -- Use dynamic SQL to check which table exists and create appropriate policy
+        -- Determine which users table exists
+        IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'Users') THEN
+            users_table_name := 'Users';
+        ELSIF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'User') THEN
+            users_table_name := 'User';
+        ELSE
+            RAISE NOTICE 'Neither Users nor User table found. Skipping super admin policy.';
+            users_table_name := NULL;
+        END IF;
+        
+        -- Create policy only if users table exists
+        IF users_table_name IS NOT NULL THEN
+            policy_sql := format(
+                'CREATE POLICY "Super admins can manage all club roles" ON "UserClubRoles"
+                    FOR ALL
+                    TO authenticated
+                    USING (
+                        EXISTS (
+                            SELECT 1 FROM %I
+                            WHERE %I.id::text = auth.uid()::text
+                            AND %I.role = ''SUPER_ADMIN''
+                        )
+                    )',
+                users_table_name, users_table_name, users_table_name
             );
+            EXECUTE policy_sql;
+            RAISE NOTICE 'Super admin policy created using % table.', users_table_name;
+        END IF;
         
         RAISE NOTICE 'RLS policies created successfully!';
     END IF;

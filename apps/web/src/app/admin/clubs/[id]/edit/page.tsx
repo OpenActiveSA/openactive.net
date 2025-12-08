@@ -5,6 +5,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
+import { 
+  getClubCourts, 
+  createCourt, 
+  updateCourt, 
+  deleteCourt,
+  SPORT_TYPES,
+  SPORT_TYPE_LABELS,
+  type Court,
+  type SportType
+} from '@/lib/courts';
 import styles from '@/components/AdminDashboard.module.css';
 
 interface EditClubProps {
@@ -81,6 +91,21 @@ export default function EditClubPage({ params }: EditClubProps) {
   const logoFileInputRef = useRef<HTMLInputElement>(null);
   const backgroundImageFileInputRef = useRef<HTMLInputElement>(null);
   
+  // Court management state
+  const [courts, setCourts] = useState<Court[]>([]);
+  const [isLoadingCourts, setIsLoadingCourts] = useState(false);
+  const [editingCourt, setEditingCourt] = useState<Court | null>(null);
+  const [showCourtForm, setShowCourtForm] = useState(false);
+  const [courtFormData, setCourtFormData] = useState<{
+    name: string;
+    sportType: SportType;
+    isActive: boolean;
+  }>({
+    name: '',
+    sportType: 'TENNIS',
+    isActive: true,
+  });
+  
   const hasLoadedRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -91,8 +116,33 @@ export default function EditClubPage({ params }: EditClubProps) {
     };
   }, []);
 
+  const loadCourts = async (clubId: string) => {
+    setIsLoadingCourts(true);
+    try {
+      const supabase = getSupabaseClientClient();
+      const courtsData = await getClubCourts(supabase, clubId, true);
+      setCourts(courtsData || []);
+      
+      // Clear any previous court-related errors if successful
+      if (courtsData && courtsData.length >= 0) {
+        // Success - courts loaded (even if empty)
+      }
+    } catch (err: any) {
+      console.error('Error loading courts in component:', {
+        error: err,
+        errorMessage: err?.message,
+        errorStack: err?.stack,
+        errorString: JSON.stringify(err, null, 2)
+      });
+      // Don't set error state, just log it and set empty array
+      setCourts([]);
+    } finally {
+      setIsLoadingCourts(false);
+    }
+  };
+
   const loadClubData = useCallback(async () => {
-    if (hasLoadedRef.current || club) {
+    if (hasLoadedRef.current) {
       return;
     }
 
@@ -118,7 +168,7 @@ export default function EditClubPage({ params }: EditClubProps) {
       // First attempt: with all columns including branding
       const result = await supabase
         .from('Clubs')
-        .select('id, name, numberOfCourts, country, province, is_active, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
+        .select('id, name, country, province, is_active, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
         .eq('id', id)
         .single();
       
@@ -130,7 +180,7 @@ export default function EditClubPage({ params }: EditClubProps) {
         console.warn('Branding columns may not exist, trying without them:', fetchError);
         const fallbackResult = await supabase
           .from('Clubs')
-          .select('id, name, numberOfCourts, country, province, is_active, createdAt')
+          .select('id, name, country, province, is_active, createdAt')
           .eq('id', id)
           .single();
         
@@ -170,13 +220,118 @@ export default function EditClubPage({ params }: EditClubProps) {
       setActionColor((data as any).actionColor || '#10b981');
       setFontColor((data as any).fontColor || '#052333');
       setHoverColor((data as any).hoverColor || '#f0f0f0');
+      
+      // Load courts for this club (don't await - let it load in background)
+      // This prevents courts loading from blocking the page render
+      loadCourts(data.id).catch((err) => {
+        console.error('Error loading courts (non-blocking):', err);
+        // Don't set error state, just log it
+      });
+      
       setIsLoading(false);
     } catch (err: any) {
       console.error('Error loading club:', err);
       setError(err.message || 'Failed to load club');
       setIsLoading(false);
+      hasLoadedRef.current = false; // Allow retry
     }
-  }, [id, club, router]);
+  }, [id, router]);
+
+  const handleAddCourt = () => {
+    setEditingCourt(null);
+    setCourtFormData({
+      name: '',
+      sportType: 'TENNIS',
+      isActive: true,
+    });
+    setShowCourtForm(true);
+  };
+
+  const handleEditCourt = (court: Court) => {
+    setEditingCourt(court);
+    setCourtFormData({
+      name: court.name,
+      sportType: court.sportType,
+      isActive: court.isActive,
+    });
+    setShowCourtForm(true);
+  };
+
+  const handleSaveCourt = async () => {
+    if (!club || !courtFormData.name.trim()) {
+      setError('Please enter a court name');
+      setTimeout(() => setError(''), 5000);
+      return;
+    }
+
+    // Clear previous messages
+    setError('');
+    setSuccess('');
+
+    try {
+      const supabase = getSupabaseClientClient();
+      
+      if (editingCourt) {
+        // Update existing court
+        const result = await updateCourt(supabase, editingCourt.id, courtFormData);
+        if (result.success) {
+          await loadCourts(club.id);
+          setShowCourtForm(false);
+          setEditingCourt(null);
+          setSuccess('Court updated successfully');
+          setTimeout(() => setSuccess(''), 3000);
+        } else {
+          setError(result.error || 'Failed to update court');
+          setTimeout(() => setError(''), 5000);
+        }
+      } else {
+        // Create new court
+        const result = await createCourt(supabase, {
+          clubId: club.id,
+          ...courtFormData,
+        });
+        if (result.success) {
+          await loadCourts(club.id);
+          setShowCourtForm(false);
+          setCourtFormData({
+            name: '',
+            sportType: 'TENNIS',
+            isActive: true,
+          });
+          setSuccess('Court added successfully');
+          setTimeout(() => setSuccess(''), 3000);
+        } else {
+          setError(result.error || 'Failed to create court');
+          setTimeout(() => setError(''), 5000);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error saving court:', err);
+      const errorMsg = err.message || 'Failed to save court';
+      setError(errorMsg);
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  const handleDeleteCourt = async (courtId: string) => {
+    if (!confirm('Are you sure you want to delete this court? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseClientClient();
+      const result = await deleteCourt(supabase, courtId, true);
+      if (result.success && club) {
+        await loadCourts(club.id);
+        setSuccess('Court deleted successfully');
+      } else {
+        setError(result.error || 'Failed to delete court');
+      }
+    } catch (err: any) {
+      console.error('Error deleting court:', err);
+      setError(err.message || 'Failed to delete court');
+    }
+  };
 
   useEffect(() => {
     if (authLoading) {
@@ -214,11 +369,13 @@ export default function EditClubPage({ params }: EditClubProps) {
 
           if (fallbackError || !fallbackData || fallbackData.role !== 'SUPER_ADMIN') {
             setError('You do not have permission to edit clubs');
+            setIsLoading(false);
             router.push('/admin');
             return;
           }
         } else if (!data || data.role !== 'SUPER_ADMIN') {
           setError('You do not have permission to edit clubs');
+          setIsLoading(false);
           router.push('/admin');
           return;
         }
@@ -228,6 +385,8 @@ export default function EditClubPage({ params }: EditClubProps) {
       } catch (err: any) {
         console.error('Authorization check error:', err);
         setError('Failed to verify permissions');
+        setIsLoading(false);
+        hasLoadedRef.current = false; // Allow retry
       }
     };
 
@@ -459,11 +618,7 @@ export default function EditClubPage({ params }: EditClubProps) {
       return;
     }
 
-    if (numberOfCourts < 1) {
-      setError('Number of courts must be at least 1');
-      setIsSubmitting(false);
-      return;
-    }
+    // Note: Court validation is no longer needed here - courts are managed separately
 
     try {
       const supabase = getSupabaseClientClient();
@@ -490,9 +645,9 @@ export default function EditClubPage({ params }: EditClubProps) {
       }
       
       // Build update object with only basic fields first
+      // Note: numberOfCourts is no longer used - courts are managed via the Courts table
       const updateData: any = {
         name: clubName.trim(),
-        numberOfCourts: numberOfCourts,
         country: country && country.trim() ? country.trim() : null,
         province: province && province.trim() ? province.trim() : null,
         is_active: isActive,
@@ -729,18 +884,320 @@ export default function EditClubPage({ params }: EditClubProps) {
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label htmlFor="numberOfCourts">Number of Courts</label>
-                  <input
-                    id="numberOfCourts"
-                    type="number"
-                    min="1"
-                    value={numberOfCourts}
-                    onChange={(e) => setNumberOfCourts(parseInt(e.target.value) || 1)}
-                    required
-                    disabled={isSubmitting}
-                    className={styles.formInput}
-                  />
+                  <label>Courts</label>
+                  <div style={{ 
+                    border: '1px solid rgba(255, 255, 255, 0.1)', 
+                    borderRadius: '8px', 
+                    padding: '16px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)'
+                  }}>
+                    {isLoadingCourts ? (
+                      <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: 0 }}>Loading courts...</p>
+                    ) : (
+                      <>
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          marginBottom: '16px'
+                        }}>
+                          <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px' }}>
+                            {courts.length} {courts.length === 1 ? 'court' : 'courts'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleAddCourt}
+                            disabled={isSubmitting}
+                            style={{
+                              padding: '8px 16px',
+                              backgroundColor: isSubmitting ? 'rgba(102, 126, 234, 0.5)' : '#667eea',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                              fontSize: '14px',
+                              fontWeight: 500,
+                              opacity: isSubmitting ? 0.6 : 1
+                            }}
+                          >
+                            + Add Court
+                          </button>
+                        </div>
+                        
+                        {courts.length === 0 ? (
+                          <div style={{ 
+                            padding: '16px', 
+                            backgroundColor: 'rgba(255, 255, 255, 0.03)', 
+                            borderRadius: '6px',
+                            border: '1px dashed rgba(255, 255, 255, 0.1)'
+                          }}>
+                            <p style={{ color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 12px 0', fontSize: '14px', fontWeight: 500 }}>
+                              {isLoadingCourts ? 'Loading courts...' : 'No courts added yet'}
+                            </p>
+                            {!isLoadingCourts && (
+                              <>
+                                <p style={{ color: 'rgba(255, 255, 255, 0.5)', margin: '0 0 12px 0', fontSize: '13px' }}>
+                                  Click the <strong>"+ Add Court"</strong> button above to create your first court. You can give it a name (e.g., "Court 1", "Center Court") and select the sport type.
+                                </p>
+                                <div style={{ 
+                                  marginTop: '12px', 
+                                  padding: '12px', 
+                                  backgroundColor: 'rgba(102, 126, 234, 0.1)', 
+                                  borderRadius: '6px',
+                                  border: '1px solid rgba(102, 126, 234, 0.2)'
+                                }}>
+                                  <p style={{ color: 'rgba(102, 126, 234, 0.9)', margin: '0 0 4px 0', fontSize: '13px', fontWeight: 500 }}>
+                                    💡 Tip
+                                  </p>
+                                  <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: 0, fontSize: '12px', lineHeight: '1.5' }}>
+                                    If you see errors when trying to add a court, make sure you've run the <strong>CREATE_COURTS_TABLE.sql</strong> migration in your Supabase SQL Editor first.
+                                  </p>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {courts.map((court) => (
+                              <div
+                                key={court.id}
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  padding: '12px',
+                                  backgroundColor: court.isActive 
+                                    ? 'rgba(255, 255, 255, 0.05)' 
+                                    : 'rgba(255, 0, 0, 0.1)',
+                                  borderRadius: '6px',
+                                  border: `1px solid ${court.isActive ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 0, 0, 0.3)'}`
+                                }}
+                              >
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '12px',
+                                    marginBottom: '4px'
+                                  }}>
+                                    <span style={{ 
+                                      color: '#ffffff', 
+                                      fontWeight: 500,
+                                      fontSize: '15px'
+                                    }}>
+                                      {court.name}
+                                    </span>
+                                    <span style={{
+                                      padding: '2px 8px',
+                                      backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                                      color: '#667eea',
+                                      borderRadius: '4px',
+                                      fontSize: '12px',
+                                      fontWeight: 500
+                                    }}>
+                                      {SPORT_TYPE_LABELS[court.sportType]}
+                                    </span>
+                                    {!court.isActive && (
+                                      <span style={{
+                                        padding: '2px 8px',
+                                        backgroundColor: 'rgba(255, 0, 0, 0.2)',
+                                        color: '#ff6b6b',
+                                        borderRadius: '4px',
+                                        fontSize: '12px',
+                                        fontWeight: 500
+                                      }}>
+                                        Inactive
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditCourt(court)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                      color: '#ffffff',
+                                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      fontSize: '13px'
+                                    }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCourt(court.id)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      backgroundColor: 'rgba(255, 0, 0, 0.2)',
+                                      color: '#ff6b6b',
+                                      border: '1px solid rgba(255, 0, 0, 0.3)',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      fontSize: '13px'
+                                    }}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {showCourtForm && (
+                  <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                  }}>
+                    <div style={{
+                      backgroundColor: '#1a1a1a',
+                      borderRadius: '12px',
+                      padding: '24px',
+                      width: '90%',
+                      maxWidth: '500px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <h3 style={{ 
+                        color: '#ffffff', 
+                        marginTop: 0, 
+                        marginBottom: '20px',
+                        fontSize: '20px'
+                      }}>
+                        {editingCourt ? 'Edit Court' : 'Add New Court'}
+                      </h3>
+                      
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ 
+                          display: 'block', 
+                          color: 'rgba(255, 255, 255, 0.8)', 
+                          marginBottom: '8px',
+                          fontSize: '14px',
+                          fontWeight: 500
+                        }}>
+                          Court Name
+                        </label>
+                        <input
+                          type="text"
+                          value={courtFormData.name}
+                          onChange={(e) => setCourtFormData({ ...courtFormData, name: e.target.value })}
+                          placeholder="e.g., Court 1, Center Court, Outdoor A"
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '6px',
+                            color: '#ffffff',
+                            fontSize: '14px'
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ 
+                          display: 'block', 
+                          color: 'rgba(255, 255, 255, 0.8)', 
+                          marginBottom: '8px',
+                          fontSize: '14px',
+                          fontWeight: 500
+                        }}>
+                          Sport Type
+                        </label>
+                        <select
+                          value={courtFormData.sportType}
+                          onChange={(e) => setCourtFormData({ ...courtFormData, sportType: e.target.value as SportType })}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '6px',
+                            color: '#ffffff',
+                            fontSize: '14px'
+                          }}
+                        >
+                          {SPORT_TYPES.map((sport) => (
+                            <option key={sport} value={sport} style={{ backgroundColor: '#1a1a1a' }}>
+                              {SPORT_TYPE_LABELS[sport]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ marginBottom: '24px' }}>
+                        <label style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '8px',
+                          color: 'rgba(255, 255, 255, 0.8)',
+                          fontSize: '14px',
+                          cursor: 'pointer'
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={courtFormData.isActive}
+                            onChange={(e) => setCourtFormData({ ...courtFormData, isActive: e.target.checked })}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          Active
+                        </label>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCourtForm(false);
+                            setEditingCourt(null);
+                          }}
+                          style={{
+                            padding: '10px 20px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                            color: '#ffffff',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveCourt}
+                          style={{
+                            padding: '10px 20px',
+                            backgroundColor: '#667eea',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 500
+                          }}
+                        >
+                          {editingCourt ? 'Update' : 'Create'} Court
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className={styles.formGroup}>
                   <label htmlFor="country">Country</label>

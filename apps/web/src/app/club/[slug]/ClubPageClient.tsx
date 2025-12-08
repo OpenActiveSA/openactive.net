@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { getSupabaseClientClient } from '@/lib/supabase';
+import { getClubCourts, SPORT_TYPE_LABELS, type Court } from '@/lib/courts';
 import ClubHeader from './ClubHeader';
 import ClubFooter from './ClubFooter';
 import styles from '@/styles/frontend.module.css';
@@ -12,7 +14,7 @@ interface Club {
   name: string;
   backgroundColor?: string;
   fontColor?: string;
-  numberOfCourts?: number;
+  numberOfCourts?: number; // Keep for backwards compatibility
 }
 
 interface ClubPageClientProps {
@@ -33,10 +35,51 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const displayName = club?.name || slug.replace(/([A-Z])/g, ' $1').trim();
-  const numberOfCourts = club?.numberOfCourts || 1;
   
   // Ensure sessionDuration always has a default value
   const validSessionDuration = (sessionDuration && Array.isArray(sessionDuration) && sessionDuration.length > 0) ? sessionDuration : [60];
+  
+  // Load courts from database
+  const [courts, setCourts] = useState<Court[]>([]);
+  const [isLoadingCourts, setIsLoadingCourts] = useState(true);
+  
+  useEffect(() => {
+    const loadCourts = async () => {
+      if (!club?.id) {
+        setIsLoadingCourts(false);
+        return;
+      }
+      
+      try {
+        const supabase = getSupabaseClientClient();
+        const courtsData = await getClubCourts(supabase, club.id, false); // Only active courts
+        setCourts(courtsData || []);
+      } catch (err) {
+        console.error('Error loading courts:', err);
+        setCourts([]);
+      } finally {
+        setIsLoadingCourts(false);
+      }
+    };
+    
+    loadCourts();
+  }, [club?.id]);
+  
+  // Fallback to numberOfCourts if no courts found (backwards compatibility)
+  const displayCourts = useMemo(() => {
+    if (courts.length > 0) {
+      return courts;
+    }
+    // Fallback: create dummy courts from numberOfCourts
+    const fallbackCount = club?.numberOfCourts || 1;
+    return Array.from({ length: fallbackCount }, (_, i) => ({
+      id: `fallback-${i + 1}`,
+      clubId: club?.id || '',
+      name: `Court ${i + 1}`,
+      sportType: 'TENNIS' as const,
+      isActive: true,
+    }));
+  }, [courts, club?.numberOfCourts, club?.id]);
   
   console.log('ClubPageClient received props:', { 
     hoverColor, 
@@ -45,7 +88,8 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
     closingTime,
     selectedColor,
     sessionDuration,
-    validSessionDuration
+    validSessionDuration,
+    courts: displayCourts
   });
   
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -53,7 +97,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
     return today.toISOString().split('T')[0];
   });
   
-  const [selectedCourt, setSelectedCourt] = useState<number | null>(null);
+  const [selectedCourt, setSelectedCourt] = useState<string | null>(null); // Changed to court ID
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
   const [dateScrollIndex, setDateScrollIndex] = useState<number>(0);
@@ -97,9 +141,6 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
   }, [openingTime, closingTime, bookingSlotInterval]);
 
   const timeSlots = generateTimeSlots();
-
-  // Generate court numbers
-  const courts = Array.from({ length: numberOfCourts }, (_, i) => i + 1);
 
   // Generate date buttons (next 14 days)
   const generateDateButtons = () => {
@@ -318,90 +359,104 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
 
         {/* Court Selection */}
         <div className={styles.courtSelection}>
-          <div className={styles.courtButtonsGrid}>
-            {courts.map((courtNum) => (
-              <div 
-                key={courtNum} 
-                className={styles.courtCard}
-                style={{
-                  backgroundColor: '#ffffff',
-                  border: 'none',
-                  borderRadius: '3px',
-                  padding: '16px'
-                }}
-              >
-                <div
-                  className={styles.courtButton}
+          {isLoadingCourts ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: fontColor, opacity: 0.7 }}>
+              Loading courts...
+            </div>
+          ) : displayCourts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: fontColor, opacity: 0.7 }}>
+              No courts available
+            </div>
+          ) : (
+            <div className={styles.courtButtonsGrid}>
+              {displayCourts.map((court) => (
+                <div 
+                  key={court.id} 
+                  className={styles.courtCard}
                   style={{
                     backgroundColor: '#ffffff',
-                    borderColor: 'rgba(255, 255, 255, 0.2)',
-                    color: '#052333',
-                    width: '100%',
-                    cursor: 'default'
+                    border: 'none',
+                    borderRadius: '3px',
+                    padding: '16px'
                   }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontWeight: '500' }}>Court {courtNum}</span>
+                  <div
+                    className={styles.courtButton}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      borderColor: 'rgba(255, 255, 255, 0.2)',
+                      color: '#052333',
+                      width: '100%',
+                      cursor: 'default'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontWeight: '500', fontSize: '16px' }}>{court.name}</span>
+                      <span style={{ fontSize: '12px', color: '#052333', opacity: 0.7 }}>
+                        {SPORT_TYPE_LABELS[court.sportType]}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                
-                {/* Duration Selection - Show buttons if logged in, show tennis court icon if not logged in */}
-                {!authLoading && user ? (
-                  validSessionDuration && validSessionDuration.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
-                        {validSessionDuration.map((duration) => (
-                          <button
-                            key={duration}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Always navigate to player selection with booking details
-                              const params = new URLSearchParams({
-                                court: courtNum.toString(),
-                                date: selectedDate,
-                                duration: duration.toString()
-                              });
-                              // Add time if selected
-                              if (selectedTime) {
-                                params.set('time', selectedTime);
-                              }
-                              router.push(`/club/${slug}/players?${params.toString()}`);
-                            }}
-                            className={`${styles.durationButton} ${selectedCourt === courtNum && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
-                            style={{
-                              backgroundColor: selectedCourt === courtNum && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.1)',
-                              borderColor: selectedCourt === courtNum && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.2)',
-                              color: selectedCourt === courtNum && selectedDuration === duration ? '#ffffff' : '#052333'
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!(selectedCourt === courtNum && selectedDuration === duration)) {
-                                e.currentTarget.style.backgroundColor = hoverColor;
-                                e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.3)';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!(selectedCourt === courtNum && selectedDuration === duration)) {
-                                e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.1)';
-                                e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.2)';
-                              }
-                            }}
-                          >
-                            {duration} min
-                          </button>
-                        ))}
+                  
+                  {/* Duration Selection - Show buttons if logged in, show tennis court icon if not logged in */}
+                  {!authLoading && user ? (
+                    validSessionDuration && validSessionDuration.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+                          {validSessionDuration.map((duration) => (
+                            <button
+                              key={duration}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Always navigate to player selection with booking details
+                                const params = new URLSearchParams({
+                                  courtId: court.id,
+                                  court: court.name, // Keep for backwards compatibility
+                                  date: selectedDate,
+                                  duration: duration.toString()
+                                });
+                                // Add time if selected
+                                if (selectedTime) {
+                                  params.set('time', selectedTime);
+                                }
+                                router.push(`/club/${slug}/players?${params.toString()}`);
+                              }}
+                              className={`${styles.durationButton} ${selectedCourt === court.id && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
+                              style={{
+                                backgroundColor: selectedCourt === court.id && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.1)',
+                                borderColor: selectedCourt === court.id && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.2)',
+                                color: selectedCourt === court.id && selectedDuration === duration ? '#ffffff' : '#052333'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!(selectedCourt === court.id && selectedDuration === duration)) {
+                                  e.currentTarget.style.backgroundColor = hoverColor;
+                                  e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.3)';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!(selectedCourt === court.id && selectedDuration === duration)) {
+                                  e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.1)';
+                                  e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.2)';
+                                }
+                              }}
+                            >
+                              {duration} min
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
                       </div>
+                    )
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                      <i className="oa-tennis-court" style={{ fontSize: '48px', color: fontColor, opacity: 0.6, display: 'inline-block' }}></i>
                       <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
                     </div>
-                  )
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
-                    <i className="oa-tennis-court" style={{ fontSize: '48px', color: fontColor, opacity: 0.6, display: 'inline-block' }}></i>
-                    <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       <ClubFooter fontColor={fontColor} />

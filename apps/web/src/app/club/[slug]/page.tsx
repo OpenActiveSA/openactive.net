@@ -41,7 +41,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     // Get all active clubs and find by slug
     const result = await supabase
       .from('Clubs')
-      .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, numberOfCourts, openingTime, closingTime, bookingSlotInterval, sessionDuration')
+      .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
       .eq('is_active', true);
     
     clubData = result.data;
@@ -51,7 +51,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     if (error && (error.code === '42703' || error.message?.includes('column'))) {
       const fallbackResult = await supabase
         .from('Clubs')
-        .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, numberOfCourts, openingTime, closingTime, bookingSlotInterval, sessionDuration')
+        .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
         .eq('is_active', true);
       
       clubData = fallbackResult.data;

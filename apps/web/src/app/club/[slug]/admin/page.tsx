@@ -101,7 +101,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
       // First attempt: with all columns including branding and booking settings
       const result = await supabase
         .from('Clubs')
-        .select('id, name, numberOfCourts, country, province, is_active, backgroundColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
+        .select('id, name, country, province, is_active, backgroundColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
         .order('createdAt', { ascending: false });
       
       clubsData = result.data;
@@ -112,7 +112,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
         console.warn('Some columns may not exist, trying with basic fields:', clubsError);
         const fallbackResult = await supabase
           .from('Clubs')
-          .select('id, name, numberOfCourts, country, province, is_active, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
+          .select('id, name, country, province, is_active, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
           .order('createdAt', { ascending: false });
         
         clubsData = fallbackResult.data;

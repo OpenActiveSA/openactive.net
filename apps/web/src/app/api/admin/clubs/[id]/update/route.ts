@@ -21,9 +21,9 @@ export async function PUT(
     const supabase = getSupabaseServerClient();
 
     // Build update object
+    // Note: numberOfCourts is no longer used - courts are managed via the Courts table
     const updateData: any = {
       name: body.name.trim(),
-      numberOfCourts: body.numberOfCourts || 1,
       country: body.country && body.country.trim() ? body.country.trim() : null,
       province: body.province && body.province.trim() ? body.province.trim() : null,
       is_active: body.is_active !== undefined ? body.is_active : true,

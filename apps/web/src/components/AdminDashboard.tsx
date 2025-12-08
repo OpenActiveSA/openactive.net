@@ -63,7 +63,7 @@ export function AdminDashboard() {
       // Load clubs
       const { data: clubsData, error: clubsError } = await supabase
         .from('Clubs')
-        .select('id, name, numberOfCourts, country, province, is_active, createdAt')
+        .select('id, name, country, province, is_active, createdAt')
         .order('createdAt', { ascending: false });
 
       if (clubsError) {

@@ -6,6 +6,16 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
+import { 
+  getClubCourts, 
+  createCourt, 
+  updateCourt, 
+  deleteCourt,
+  SPORT_TYPES,
+  SPORT_TYPE_LABELS,
+  type Court,
+  type SportType
+} from '@/lib/courts';
 import styles from './ClubManage.module.css';
 
 interface ClubManageProps {
@@ -30,6 +40,19 @@ export default function ClubManagePage({ params }: ClubManageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
+  const [courts, setCourts] = useState<Court[]>([]);
+  const [isLoadingCourts, setIsLoadingCourts] = useState(false);
+  const [editingCourt, setEditingCourt] = useState<Court | null>(null);
+  const [showCourtForm, setShowCourtForm] = useState(false);
+  const [courtFormData, setCourtFormData] = useState<{
+    name: string;
+    sportType: SportType;
+    isActive: boolean;
+  }>({
+    name: '',
+    sportType: 'TENNIS',
+    isActive: true,
+  });
 
   useEffect(() => {
     if (authLoading) return;
@@ -52,7 +75,7 @@ export default function ClubManagePage({ params }: ClubManageProps) {
       // Fetch all clubs and find the one matching the slug
       const { data: clubsData, error: clubsError } = await supabase
         .from('Clubs')
-        .select('id, name, numberOfCourts, country, province, is_active, createdAt')
+        .select('id, name, country, province, is_active, createdAt')
         .eq('is_active', true);
 
       if (clubsError) {
@@ -71,11 +94,118 @@ export default function ClubManagePage({ params }: ClubManageProps) {
       }
 
       setClub(foundClub as Club);
+      
+      // Load courts if on courts tab
+      if (activeTab === 'courts') {
+        loadCourts(foundClub.id);
+      }
     } catch (err: any) {
       console.error('Error loading club:', err);
       setError(err.message || 'Failed to load club');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadCourts = async (clubId: string) => {
+    setIsLoadingCourts(true);
+    try {
+      const supabase = getSupabaseClientClient();
+      const courtsData = await getClubCourts(supabase, clubId, true);
+      setCourts(courtsData);
+    } catch (err: any) {
+      console.error('Error loading courts:', err);
+      setError(err.message || 'Failed to load courts');
+    } finally {
+      setIsLoadingCourts(false);
+    }
+  };
+
+  useEffect(() => {
+    if (club && activeTab === 'courts') {
+      loadCourts(club.id);
+    }
+  }, [activeTab, club]);
+
+  const handleAddCourt = () => {
+    setEditingCourt(null);
+    setCourtFormData({
+      name: '',
+      sportType: 'TENNIS',
+      isActive: true,
+    });
+    setShowCourtForm(true);
+  };
+
+  const handleEditCourt = (court: Court) => {
+    setEditingCourt(court);
+    setCourtFormData({
+      name: court.name,
+      sportType: court.sportType,
+      isActive: court.isActive,
+    });
+    setShowCourtForm(true);
+  };
+
+  const handleSaveCourt = async () => {
+    if (!club || !courtFormData.name.trim()) {
+      setError('Please enter a court name');
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseClientClient();
+      
+      if (editingCourt) {
+        // Update existing court
+        const result = await updateCourt(supabase, editingCourt.id, courtFormData);
+        if (result.success) {
+          await loadCourts(club.id);
+          setShowCourtForm(false);
+          setEditingCourt(null);
+        } else {
+          setError(result.error || 'Failed to update court');
+        }
+      } else {
+        // Create new court
+        const result = await createCourt(supabase, {
+          clubId: club.id,
+          ...courtFormData,
+        });
+        if (result.success) {
+          await loadCourts(club.id);
+          setShowCourtForm(false);
+          setCourtFormData({
+            name: '',
+            sportType: 'TENNIS',
+            isActive: true,
+          });
+        } else {
+          setError(result.error || 'Failed to create court');
+        }
+      }
+    } catch (err: any) {
+      console.error('Error saving court:', err);
+      setError(err.message || 'Failed to save court');
+    }
+  };
+
+  const handleDeleteCourt = async (courtId: string) => {
+    if (!confirm('Are you sure you want to delete this court? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseClientClient();
+      const result = await deleteCourt(supabase, courtId, true);
+      if (result.success && club) {
+        await loadCourts(club.id);
+      } else {
+        setError(result.error || 'Failed to delete court');
+      }
+    } catch (err: any) {
+      console.error('Error deleting court:', err);
+      setError(err.message || 'Failed to delete court');
     }
   };
 

@@ -4,13 +4,14 @@
  * This system allows users to have different roles at different clubs.
  * - VISITOR: Default role (no record needed - absence = visitor)
  * - MEMBER: Regular member of the club
+ * - COACH: Coach of the club
  * - CLUB_ADMIN: Administrator of a specific club
  * 
  * Global roles (in Users table):
  * - SUPER_ADMIN: System-wide administrator
  */
 
-export type ClubRole = 'VISITOR' | 'MEMBER' | 'CLUB_ADMIN';
+export type ClubRole = 'VISITOR' | 'MEMBER' | 'COACH' | 'CLUB_ADMIN';
 
 export interface UserClubRole {
   id: string;

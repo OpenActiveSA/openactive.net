@@ -5,7 +5,8 @@ import ClubsListClient from './ClubsListClient';
 interface Club {
   id: string;
   name: string;
-  numberOfCourts?: number;
+  numberOfCourts?: number; // Keep for backwards compatibility
+  courtCount?: number; // New: actual count from Courts table
   country?: string;
   province?: string;
   logo?: string;
@@ -27,7 +28,7 @@ export default async function ClubsPage() {
     // First attempt: with all columns including branding
     const result = await supabase
       .from('Clubs')
-      .select('id, name, numberOfCourts, country, province, logo, backgroundImage, backgroundColor')
+      .select('id, name, country, province, logo, backgroundImage, backgroundColor')
       .eq('is_active', true)
       .order('name', { ascending: true });
     
@@ -38,7 +39,7 @@ export default async function ClubsPage() {
     if (error && (error.code === '42703' || error.message?.includes('column'))) {
       const fallbackResult = await supabase
         .from('Clubs')
-        .select('id, name, numberOfCourts, country, province')
+        .select('id, name, country, province')
         .eq('is_active', true)
         .order('name', { ascending: true });
       
@@ -48,6 +49,31 @@ export default async function ClubsPage() {
 
     if (!error && clubsData) {
       clubs = clubsData as Club[];
+      
+      // Load court counts for each club
+      try {
+        const { data: courtsData } = await supabase
+          .from('Courts')
+          .select('clubId')
+          .eq('isActive', true);
+        
+        if (courtsData) {
+          // Count courts per club
+          const courtCounts = courtsData.reduce((acc, court) => {
+            acc[court.clubId] = (acc[court.clubId] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          
+          // Add court counts to clubs
+          clubs = clubs.map(club => ({
+            ...club,
+            courtCount: courtCounts[club.id] || 0
+          }));
+        }
+      } catch (courtsError) {
+        // If Courts table doesn't exist or error, just use numberOfCourts as fallback
+        console.warn('Could not load court counts, using numberOfCourts:', courtsError);
+      }
     }
   } catch (err) {
     console.error('Error loading clubs:', err);

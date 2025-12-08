@@ -1,5 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// Singleton instances to prevent multiple client creation
+let clientInstance: SupabaseClient | null = null;
+let serverInstance: SupabaseClient | null = null;
+
 /**
  * Get Supabase client based on environment
  * 
@@ -71,8 +75,8 @@ export function getSupabaseClient(options?: {
     );
   }
 
-  // Log which environment we're using (only in development)
-  if (isDevelopment) {
+  // Log which environment we're using (only in development, and only once)
+  if (isDevelopment && !clientInstance && !serverInstance) {
     const mode = useLocal ? 'local' : 'remote';
     const keyType = options?.useServiceRole ? 'service role' : 'anon';
     console.log(`[Supabase] Mode: ${mode}, Key: ${keyType}`);
@@ -84,6 +88,12 @@ export function getSupabaseClient(options?: {
     auth: {
       persistSession: options?.useServiceRole ? false : true,
       autoRefreshToken: !options?.useServiceRole,
+      detectSessionInUrl: true,
+      // Handle refresh token errors gracefully
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      storageKey: 'sb-auth-token',
+      // Clear invalid tokens on error
+      flowType: 'pkce',
     },
   });
 }
@@ -91,16 +101,36 @@ export function getSupabaseClient(options?: {
 /**
  * Server-side Supabase client (uses service role key)
  * Use this for API routes and server components
+ * 
+ * Note: Server instances are not cached as they may need different configurations
+ * per request in some scenarios. If you need caching, implement request-scoped caching.
  */
 export function getSupabaseServerClient(): SupabaseClient {
-  return getSupabaseClient({ useServiceRole: true });
+  // For server-side, we can create new instances as they're request-scoped
+  // But we'll cache if no custom options are needed
+  if (!serverInstance) {
+    serverInstance = getSupabaseClient({ useServiceRole: true });
+  }
+  return serverInstance;
 }
 
 /**
  * Client-side Supabase client (uses anon key)
  * Use this in client components and browser code
+ * 
+ * This uses a singleton pattern to prevent multiple GoTrueClient instances
+ * which can cause warnings and undefined behavior.
  */
 export function getSupabaseClientClient(): SupabaseClient {
+  // Use singleton pattern for client-side to prevent multiple instances
+  if (typeof window !== 'undefined') {
+    if (!clientInstance) {
+      clientInstance = getSupabaseClient({ useServiceRole: false });
+    }
+    return clientInstance;
+  }
+  
+  // Server-side fallback (shouldn't happen, but handle gracefully)
   return getSupabaseClient({ useServiceRole: false });
 }
 
