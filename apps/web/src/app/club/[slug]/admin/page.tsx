@@ -1469,9 +1469,16 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                         </button>
                         <button
                           onClick={() => {
+                            if (!editingRule) return;
+                            
                             if (editingRule.id) {
                               // Update existing rule
-                              setScheduleRules(scheduleRules.map(r => r.id === editingRule.id ? editingRule : r));
+                              const ruleId = editingRule.id;
+                              setScheduleRules(scheduleRules.map(r => 
+                                r.id === ruleId 
+                                  ? { ...editingRule, id: ruleId } 
+                                  : r
+                              ));
                             } else {
                               // Add new rule
                               setScheduleRules([...scheduleRules, { ...editingRule, id: Date.now().toString() }]);
