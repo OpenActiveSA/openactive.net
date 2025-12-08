@@ -234,12 +234,16 @@ export default function PlayerSelectionPage() {
               borderRight: `3px solid ${selectedColor}`
             }}>
               <div style={{ textAlign: 'center', flex: 1, borderRight: '1px solid rgba(255, 255, 255, 0.2)' }}>
-                <div style={{ fontSize: '14px', color: fontColor, opacity: 0.8, marginBottom: '4px' }}>
-                  {formattedDate.weekday}
-                </div>
-                <div style={{ fontSize: '16px', fontWeight: '600', color: fontColor }}>
-                  {formattedDate.day} {formattedDate.month}
-                </div>
+                {typeof formattedDate === 'object' && formattedDate !== null && (
+                  <>
+                    <div style={{ fontSize: '14px', color: fontColor, opacity: 0.8, marginBottom: '4px' }}>
+                      {formattedDate.weekday}
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: '600', color: fontColor }}>
+                      {formattedDate.day} {formattedDate.month}
+                    </div>
+                  </>
+                )}
               </div>
               {time && (
                 <div style={{ textAlign: 'center', flex: 1, borderRight: '1px solid rgba(255, 255, 255, 0.2)' }}>
