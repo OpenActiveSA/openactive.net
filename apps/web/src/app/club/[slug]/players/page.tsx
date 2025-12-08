@@ -37,7 +37,7 @@ export default function PlayerSelectionPage() {
   
   // Player selection state
   const [bookingType, setBookingType] = useState<'singles' | 'doubles' | 'coaching'>('singles');
-  const [selectedPlayers, setSelectedPlayers] = useState<Array<{ id: string; name: string } | null>>([null, null, null, null]);
+  const [selectedPlayers, setSelectedPlayers] = useState<Array<{ id: string; name: string; email: string } | null>>([null, null, null, null]);
   const [playerSearchTerm, setPlayerSearchTerm] = useState<string>('');
   const [showPlayerDropdown, setShowPlayerDropdown] = useState<number | null>(null);
   const [availablePlayers, setAvailablePlayers] = useState<Array<{ id: string; name: string; email: string }>>([]);
@@ -180,7 +180,7 @@ export default function PlayerSelectionPage() {
       .slice(0, 10);
   }, [availablePlayers, playerSearchTerm]);
   
-  const handleSelectPlayer = (playerIndex: number, player: { id: string; name: string } | null) => {
+  const handleSelectPlayer = (playerIndex: number, player: { id: string; name: string; email: string } | null) => {
     const newPlayers = [...selectedPlayers];
     newPlayers[playerIndex] = player;
     setSelectedPlayers(newPlayers);
@@ -190,7 +190,7 @@ export default function PlayerSelectionPage() {
   
   const handleAddGuest = (playerIndex: number) => {
     const newPlayers = [...selectedPlayers];
-    newPlayers[playerIndex] = { id: 'guest', name: 'Guest' };
+    newPlayers[playerIndex] = { id: 'guest', name: 'Guest', email: '' };
     setSelectedPlayers(newPlayers);
     setShowPlayerDropdown(null);
   };
