@@ -38,6 +38,10 @@
   content: "\f004";
   display: inline-block;
 }
+.oa-tennis-court:before {
+  content: "\f006";
+  display: inline-block;
+}
 
 :root {
   --background: #ffffff;

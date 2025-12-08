@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getSupabaseClientClient } from '@/lib/supabase';
 import styles from './AuthScreen.module.css';
 
 export function AuthScreen() {
@@ -41,6 +42,47 @@ export function AuthScreen() {
 
   const handleFacebookPress = () => {
     alert('Coming Soon\nFacebook sign-in will be available soon');
+  };
+
+  const handleQuickLogin = async () => {
+    const testEmail = 'jb@openactive.co.za';
+    const testPassword = 'Su5ver303#';
+    
+    setIsLoading(true);
+    
+    try {
+      const supabase = getSupabaseClientClient();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: testEmail,
+        password: testPassword,
+      });
+
+      if (authError) {
+        alert(`Quick login failed: ${authError.message}`);
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        // Update last login in Users table
+        try {
+          await supabase
+            .from('Users')
+            .update({ lastLoginAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+            .eq('id', data.user.id.toString());
+        } catch (err) {
+          console.error('Error updating last login:', err);
+        }
+        
+        // Navigate to clubs page
+        router.push('/clubs');
+      }
+    } catch (err: any) {
+      console.error('Quick login error:', err);
+      alert(`Quick login failed: ${err.message || 'Please try again.'}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -93,6 +135,21 @@ export function AuthScreen() {
         >
           <span className={styles.emailIcon}>✉</span>
           <span className={styles.socialButtonText}>Continue with email</span>
+        </button>
+
+        {/* Temporary Quick Login Button for Testing */}
+        <button 
+          className={styles.socialButton}
+          style={{ 
+            backgroundColor: 'rgba(255, 193, 7, 0.2)', 
+            border: '1px solid rgba(255, 193, 7, 0.4)',
+            marginTop: '12px'
+          }}
+          onClick={handleQuickLogin}
+          disabled={isLoading}
+        >
+          <span style={{ fontSize: '18px' }}>⚡</span>
+          <span className={styles.socialButtonText}>Quick Login (Test)</span>
         </button>
 
         {/* Terms */}

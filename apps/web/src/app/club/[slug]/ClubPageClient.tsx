@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth-context';
 import ClubHeader from './ClubHeader';
 import ClubFooter from './ClubFooter';
 import styles from '@/styles/frontend.module.css';
@@ -30,6 +31,7 @@ interface ClubPageClientProps {
 
 export default function ClubPageClient({ club, slug, logo, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration }: ClubPageClientProps) {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const displayName = club?.name || slug.replace(/([A-Z])/g, ' $1').trim();
   const numberOfCourts = club?.numberOfCourts || 1;
   
@@ -343,50 +345,57 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                   </div>
                 </div>
                 
-                {/* Duration Selection - Always visible for all courts */}
-                {validSessionDuration && validSessionDuration.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
-                      {validSessionDuration.map((duration) => (
-                        <button
-                          key={duration}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Always navigate to player selection with booking details
-                            const params = new URLSearchParams({
-                              court: courtNum.toString(),
-                              date: selectedDate,
-                              duration: duration.toString()
-                            });
-                            // Add time if selected
-                            if (selectedTime) {
-                              params.set('time', selectedTime);
-                            }
-                            router.push(`/club/${slug}/players?${params.toString()}`);
-                          }}
-                          className={`${styles.durationButton} ${selectedCourt === courtNum && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
-                          style={{
-                            backgroundColor: selectedCourt === courtNum && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.1)',
-                            borderColor: selectedCourt === courtNum && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.2)',
-                            color: selectedCourt === courtNum && selectedDuration === duration ? '#ffffff' : '#052333'
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!(selectedCourt === courtNum && selectedDuration === duration)) {
-                              e.currentTarget.style.backgroundColor = hoverColor;
-                              e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.3)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!(selectedCourt === courtNum && selectedDuration === duration)) {
-                              e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.1)';
-                              e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.2)';
-                            }
-                          }}
-                        >
-                          {duration} min
-                        </button>
-                      ))}
+                {/* Duration Selection - Show buttons if logged in, show tennis court icon if not logged in */}
+                {!authLoading && user ? (
+                  validSessionDuration && validSessionDuration.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+                        {validSessionDuration.map((duration) => (
+                          <button
+                            key={duration}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Always navigate to player selection with booking details
+                              const params = new URLSearchParams({
+                                court: courtNum.toString(),
+                                date: selectedDate,
+                                duration: duration.toString()
+                              });
+                              // Add time if selected
+                              if (selectedTime) {
+                                params.set('time', selectedTime);
+                              }
+                              router.push(`/club/${slug}/players?${params.toString()}`);
+                            }}
+                            className={`${styles.durationButton} ${selectedCourt === courtNum && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
+                            style={{
+                              backgroundColor: selectedCourt === courtNum && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.1)',
+                              borderColor: selectedCourt === courtNum && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.2)',
+                              color: selectedCourt === courtNum && selectedDuration === duration ? '#ffffff' : '#052333'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!(selectedCourt === courtNum && selectedDuration === duration)) {
+                                e.currentTarget.style.backgroundColor = hoverColor;
+                                e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.3)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!(selectedCourt === courtNum && selectedDuration === duration)) {
+                                e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.1)';
+                                e.currentTarget.style.borderColor = 'rgba(5, 35, 51, 0.2)';
+                              }
+                            }}
+                          >
+                            {duration} min
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
                     </div>
+                  )
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                    <i className="oa-tennis-court" style={{ fontSize: '48px', color: fontColor, opacity: 0.6, display: 'inline-block' }}></i>
                     <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
                   </div>
                 )}

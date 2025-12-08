@@ -98,7 +98,7 @@
 .courtCard {
   display: flex;
   flex-direction: column;
-  min-width: 200px;
+  min-width: 278px;
   transition: all 0.2s;
 }
 

@@ -172,22 +172,14 @@ CREATE POLICY "Club admins can view all club bookings" ON "Bookings"
     FOR SELECT
     TO authenticated
     USING (
-        -- Check if UserClubRoles table exists and user is CLUB_ADMIN or MEMBER
-        (
-            EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'UserClubRoles')
-            AND EXISTS (
-                SELECT 1 FROM "UserClubRoles" ucr
-                WHERE ucr."userId"::text = auth.uid()::text
-                AND ucr."clubId" = "Bookings"."clubId"
-                AND ucr."role" IN ('CLUB_ADMIN', 'MEMBER')
-            )
-        )
-        -- Or check if user is SUPER_ADMIN
-        OR EXISTS (
+        -- Check if user is SUPER_ADMIN
+        EXISTS (
             SELECT 1 FROM "Users"
             WHERE "Users".id::text = auth.uid()::text
             AND "Users".role = 'SUPER_ADMIN'
         )
+        -- Note: UserClubRoles table check removed as table doesn't exist
+        -- Add back when UserClubRoles table is created
     );
 
 -- Club admins can manage all bookings for their clubs
@@ -195,22 +187,14 @@ CREATE POLICY "Club admins can manage all club bookings" ON "Bookings"
     FOR ALL
     TO authenticated
     USING (
-        -- Check if UserClubRoles table exists and user is CLUB_ADMIN
-        (
-            EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'UserClubRoles')
-            AND EXISTS (
-                SELECT 1 FROM "UserClubRoles" ucr
-                WHERE ucr."userId"::text = auth.uid()::text
-                AND ucr."clubId" = "Bookings"."clubId"
-                AND ucr."role" = 'CLUB_ADMIN'
-            )
-        )
-        -- Or check if user is SUPER_ADMIN
-        OR EXISTS (
+        -- Check if user is SUPER_ADMIN
+        EXISTS (
             SELECT 1 FROM "Users"
             WHERE "Users".id::text = auth.uid()::text
             AND "Users".role = 'SUPER_ADMIN'
         )
+        -- Note: UserClubRoles table check removed as table doesn't exist
+        -- Add back when UserClubRoles table is created
     );
 
 -- Public can view confirmed bookings (for availability checking)
