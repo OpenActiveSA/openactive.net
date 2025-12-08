@@ -1,0 +1,545 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from '@/lib/auth-context';
+import { getSupabaseClientClient } from '@/lib/supabase';
+import styles from '@/styles/frontend.module.css';
+
+interface ClubHeaderProps {
+  logo?: string;
+  fontColor: string;
+  backgroundColor?: string;
+  selectedColor?: string;
+  currentPath?: string;
+}
+
+export default function ClubHeader({ logo, fontColor, backgroundColor, selectedColor, currentPath }: ClubHeaderProps) {
+  const [logoError, setLogoError] = useState(false);
+  const [userName, setUserName] = useState<string>('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const { user, loading: authLoading, signOut } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Fetch user's name when logged in
+  useEffect(() => {
+    const fetchUserName = async () => {
+      if (user && user.id) {
+        try {
+          const supabase = getSupabaseClientClient();
+          const { data: userData } = await supabase
+            .from('Users')
+            .select('name, Firstname, Surname')
+            .eq('id', user.id)
+            .maybeSingle();
+          
+          if (userData) {
+            const name = userData.name || 
+                        (userData.Firstname && userData.Surname 
+                          ? `${userData.Firstname} ${userData.Surname}` 
+                          : userData.Firstname || userData.Surname || '');
+            setUserName(name || user.email?.split('@')[0] || 'User');
+          } else {
+            setUserName(user.email?.split('@')[0] || 'User');
+          }
+        } catch (err) {
+          console.error('Error fetching user name:', err);
+          setUserName(user.email?.split('@')[0] || 'User');
+        }
+      } else {
+        setUserName('');
+      }
+    };
+    
+    fetchUserName();
+  }, [user]);
+  
+  // Determine active menu item based on current path
+  const isActive = (path: string) => {
+    if (currentPath) {
+      // If on club page, "Book a court" is active
+      if (currentPath.includes('/club/') && path === '/book') {
+        return true;
+      }
+    }
+    return pathname === path;
+  };
+  
+  const activeColor = selectedColor || '#667eea';
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
+
+  const handleLogout = async () => {
+    try {
+      setShowDropdown(false);
+      await signOut();
+      // Stay on current page - just refresh to show logged-out state
+      router.refresh();
+    } catch (error) {
+      console.error('Error logging out:', error);
+      // Refresh page even if signOut fails
+      router.refresh();
+    }
+  };
+
+  const handleSwitchClub = () => {
+    setShowDropdown(false);
+    router.push('/clubs');
+  };
+
+  return (
+    <header style={{
+      position: 'sticky',
+      top: 0,
+      zIndex: 100,
+      backgroundColor: '#ffffff',
+      backdropFilter: 'blur(10px)',
+      borderBottom: `1px solid rgba(0, 0, 0, 0.1)`,
+      padding: '16px 24px'
+    }}>
+      <div style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '24px'
+      }}>
+        {/* Logo - Left */}
+        <div style={{ flexShrink: 0 }}>
+          <Link 
+            href="/"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              textDecoration: 'none',
+              color: 'inherit'
+            }}
+          >
+            {logo && !logoError ? (
+              <img 
+                src={logo} 
+                alt="Club logo" 
+                style={{ 
+                  height: '60px',
+                  width: 'auto',
+                  objectFit: 'contain'
+                }}
+                onError={() => setLogoError(true)}
+              />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#052333' }}>
+                <i className="oa-open-o" style={{ fontSize: '24px', display: 'inline-block' }}></i>
+                <i className="oa-open-p" style={{ fontSize: '24px', display: 'inline-block' }}></i>
+                <i className="oa-open-e" style={{ fontSize: '24px', display: 'inline-block' }}></i>
+                <i className="oa-open-n" style={{ fontSize: '24px', display: 'inline-block' }}></i>
+              </div>
+            )}
+          </Link>
+        </div>
+
+        {/* Menu - Middle */}
+        <nav className={styles.headerNav}>
+          {!authLoading && !user && (
+          <Link
+            href="/register"
+            className={styles.navLink}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '0.9';
+            }}
+          >
+            Register
+          </Link>
+          )}
+          {!authLoading && !user ? (
+            <Link
+              href="/login"
+              className={styles.navLink}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = activeColor;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#052333';
+              }}
+            >
+              Book a court
+            </Link>
+          ) : (
+          <Link
+              href={currentPath && currentPath.includes('/club/') 
+                ? currentPath.split('/').slice(0, 3).join('/') // Extract /club/[slug] from currentPath
+                : '/book'}
+            className={`${styles.navLink} ${isActive('/book') ? styles.navLinkActive : ''}`}
+            style={{
+              color: isActive('/book') ? activeColor : undefined
+            }}
+            onMouseEnter={(e) => {
+              if (!isActive('/book')) {
+                e.currentTarget.style.color = activeColor;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive('/book')) {
+                e.currentTarget.style.color = '#052333';
+              }
+            }}
+          >
+            Book a court
+          </Link>
+          )}
+          <Link
+            href="/events"
+            className={styles.navLink}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '0.9';
+            }}
+          >
+            Events
+          </Link>
+          <Link
+            href="/rankings"
+            className={styles.navLink}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '0.9';
+            }}
+          >
+            Rankings
+          </Link>
+        </nav>
+
+        {/* User Name or Login Button - Right */}
+        <div style={{ flexShrink: 0, position: 'relative' }} ref={dropdownRef}>
+          {!authLoading && user ? (
+            <>
+              <div 
+                style={{
+                  color: '#052333',
+                  fontSize: '16px',
+                  fontWeight: '500',
+                  padding: '8px 20px',
+                  border: '1px solid #052333',
+                  borderRadius: '6px',
+                  display: 'inline-block',
+                  opacity: 0.9,
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  position: 'relative'
+                }}
+                onClick={() => setShowDropdown(!showDropdown)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                  e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '0.9';
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                {userName || user.email?.split('@')[0] || 'User'}
+                <span style={{ marginLeft: '8px', fontSize: '12px' }}>▼</span>
+              </div>
+              
+              {/* Dropdown Menu */}
+              {showDropdown && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: '8px',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid rgba(0, 0, 0, 0.1)',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  minWidth: '220px',
+                  zIndex: 1000,
+                  overflow: 'hidden'
+                }}>
+                  <Link 
+                    href="/profile" 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#052333',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <span style={{ fontSize: '18px' }}>👤</span>
+                    <span>My Profile</span>
+                  </Link>
+                  
+                  <Link 
+                    href="/matches" 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#052333',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <span style={{ fontSize: '18px' }}>🏆</span>
+                    <span>Manage Matches</span>
+                  </Link>
+                  
+                  <Link 
+                    href="/events" 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#052333',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <span style={{ fontSize: '18px' }}>📅</span>
+                    <span>Events</span>
+                  </Link>
+                  
+                  <Link 
+                    href="/documents" 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#052333',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <span style={{ fontSize: '18px' }}>📄</span>
+                    <span>Club Documents</span>
+                  </Link>
+                  
+                  <Link 
+                    href="/finance" 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#052333',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <span style={{ fontSize: '18px' }}>💰</span>
+                    <span>Finance</span>
+                  </Link>
+                  
+                  <Link 
+                    href="/rankings" 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#052333',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <span style={{ fontSize: '18px' }}>📊</span>
+                    <span>Ranking</span>
+                  </Link>
+                  
+                  <div 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#052333',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={handleSwitchClub}
+                  >
+                    <span style={{ fontSize: '18px' }}>🔄</span>
+                    <span>Switch Club</span>
+                  </div>
+                  
+                  <Link 
+                    href="/help" 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#052333',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <span style={{ fontSize: '18px' }}>❓</span>
+                    <span>Help</span>
+                  </Link>
+                  
+                  <Link 
+                    href="/shop" 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#052333',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    <span style={{ fontSize: '18px' }}>🛒</span>
+                    <span>Tennis Shop</span>
+                  </Link>
+                  
+                  <div 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      color: '#dc2626',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(220, 38, 38, 0.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    onClick={handleLogout}
+                  >
+                    <span style={{ fontSize: '18px' }}>🚪</span>
+                    <span>Log out</span>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+          <Link
+            href="/login"
+            className={styles.loginButton}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '1';
+              e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '0.9';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            Login
+          </Link>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+

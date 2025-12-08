@@ -146,13 +146,13 @@ export function EmailAuth() {
               // Redirect SUPER_ADMIN to admin dashboard
               router.push('/admin');
             } else {
-              // Redirect regular users to home page
-              router.push('/');
+              // Redirect regular users to clubs list page
+              router.push('/clubs');
             }
           } catch (err) {
             console.error('Error checking user role:', err);
-            // Default to home page if role check fails
-            router.push('/');
+            // Default to clubs list page if role check fails
+            router.push('/clubs');
           }
           router.refresh();
         }
@@ -205,13 +205,13 @@ export function EmailAuth() {
               // Redirect SUPER_ADMIN to admin dashboard
               router.push('/admin');
             } else {
-              // Redirect regular users to home page
-              router.push('/');
+              // Redirect regular users to clubs list page
+              router.push('/clubs');
             }
           } catch (err) {
             console.error('Error checking user role:', err);
-            // Default to home page if role check fails
-            router.push('/');
+            // Default to clubs list page if role check fails
+            router.push('/clubs');
           }
           router.refresh();
         }
@@ -227,18 +227,20 @@ export function EmailAuth() {
   const handleBackToEmail = () => {
     setStep('email');
     setPassword('');
-    setDisplayName('');
+    setName('');
+    setSurname('');
     setError('');
   };
 
   return (
     <div className={styles.container}>
       <div className={styles.content}>
-        {/* Logo */}
-        <div className={styles.logoContainer}>
-          <div className={styles.logo}>
-            <span className={styles.logoText}>O</span>
-          </div>
+        {/* OpenActive Font Icons - Spelling "OPEN" */}
+        <div className={styles.iconRow}>
+          <i className="oa-open-o" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
+          <i className="oa-open-p" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
+          <i className="oa-open-e" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
+          <i className="oa-open-n" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block' }}></i>
         </div>
 
         {/* Title */}

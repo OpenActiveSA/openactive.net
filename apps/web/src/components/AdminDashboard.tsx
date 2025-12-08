@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
+import { generateSlug } from '@/lib/slug-utils';
 import styles from './AdminDashboard.module.css';
 
 interface User {
@@ -28,7 +30,7 @@ interface Club {
 export function AdminDashboard() {
   const router = useRouter();
   const { user, loading: authLoading, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState<User[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -185,6 +187,20 @@ export function AdminDashboard() {
 
         <nav className={styles.sidebarNav}>
           <button
+            className={`${styles.navItem} ${activeTab === 'overview' ? styles.active : ''}`}
+            onClick={() => setActiveTab('overview')}
+            title="Overview"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            {!isSidebarCollapsed && <span>Overview</span>}
+          </button>
+
+          <button
             className={`${styles.navItem} ${activeTab === 'users' ? styles.active : ''}`}
             onClick={() => setActiveTab('users')}
             title="All Users"
@@ -253,17 +269,36 @@ export function AdminDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className={styles.adminMain}>
+      <main className={styles.adminMain} style={{ position: 'relative' }}>
         <div className={styles.adminContent}>
           {error && <div className={styles.errorMessage}>{error}</div>}
 
           {isLoading ? (
-            <div className={styles.loadingContainer}>
-              <div className={styles.spinner}></div>
-              <p>Loading...</p>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              minHeight: 'calc(100vh - 80px)',
+              width: '100%',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                gap: '16px' 
+              }}>
+                <div className={styles.spinner}></div>
+                <p style={{ color: 'white', margin: 0 }}>Loading...</p>
+              </div>
             </div>
           ) : (
             <>
+              {activeTab === 'overview' && <OverviewTab users={users} clubs={clubs} />}
               {activeTab === 'users' && <AllUsersTab users={users} onRefresh={loadDashboardData} />}
               {activeTab === 'clubs' && <AllClubsTab clubs={clubs} onRefresh={loadDashboardData} />}
               {activeTab === 'analytics' && <AnalyticsTab users={users} clubs={clubs} />}
@@ -271,6 +306,109 @@ export function AdminDashboard() {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
+  const stats = {
+    totalUsers: users.length,
+    totalClubs: clubs.length,
+    activeClubs: clubs.filter((c) => c.is_active).length,
+    superAdmins: users.filter((u) => u.role === 'SUPER_ADMIN').length,
+    clubAdmins: users.filter((u) => u.role === 'CLUB_ADMIN').length,
+    members: users.filter((u) => u.role === 'MEMBER').length,
+  };
+
+  return (
+    <div className={styles.contentSection}>
+      <div className={styles.sectionHeader}>
+        <div>
+          <h1>Overview</h1>
+          <p className={styles.sectionSubtitle}>System dashboard and key metrics</p>
+        </div>
+      </div>
+
+      <div className={styles.statsGrid}>
+        <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconBlue}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </div>
+          <div className={styles.statContent}>
+            <h3>{stats.totalUsers}</h3>
+            <p>Total Users</p>
+          </div>
+        </div>
+
+        <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconGreen}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          </div>
+          <div className={styles.statContent}>
+            <h3>{stats.totalClubs}</h3>
+            <p>Total Clubs</p>
+          </div>
+        </div>
+
+        <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconPurple}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="8" r="7"></circle>
+              <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+            </svg>
+          </div>
+          <div className={styles.statContent}>
+            <h3>{stats.superAdmins}</h3>
+            <p>System Admins</p>
+          </div>
+        </div>
+
+        <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconOrange}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <div className={styles.statContent}>
+            <h3>{stats.clubAdmins}</h3>
+            <p>Club Admins</p>
+          </div>
+        </div>
+
+        <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconTeal}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <div className={styles.statContent}>
+            <h3>{stats.members}</h3>
+            <p>Members</p>
+          </div>
+        </div>
+
+        <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconGreen}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <div className={styles.statContent}>
+            <h3>{stats.activeClubs}</h3>
+            <p>Active Clubs</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -382,6 +520,30 @@ function AllUsersTab({ users, onRefresh }: { users: User[]; onRefresh: () => voi
   );
 }
 
+// List of countries for the dropdown
+const COUNTRIES = [
+  'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria',
+  'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan',
+  'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cabo Verde', 'Cambodia',
+  'Cameroon', 'Canada', 'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros', 'Congo', 'Costa Rica',
+  'Croatia', 'Cuba', 'Cyprus', 'Czech Republic', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic', 'Ecuador', 'Egypt',
+  'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia', 'Fiji', 'Finland', 'France', 'Gabon',
+  'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Grenada', 'Guatemala', 'Guinea', 'Guinea-Bissau', 'Guyana',
+  'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel',
+  'Italy', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kiribati', 'Kosovo', 'Kuwait', 'Kyrgyzstan',
+  'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Lithuania', 'Luxembourg', 'Madagascar',
+  'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Malta', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico', 'Micronesia',
+  'Moldova', 'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nauru', 'Nepal',
+  'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman', 'Pakistan',
+  'Palau', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland', 'Portugal', 'Qatar',
+  'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'Sao Tome and Principe', 'Saudi Arabia',
+  'Senegal', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands', 'Somalia', 'South Africa',
+  'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland', 'Syria', 'Taiwan',
+  'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey', 'Turkmenistan',
+  'Tuvalu', 'Uganda', 'Ukraine', 'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City',
+  'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe'
+].sort();
+
 function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => void }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -415,33 +577,61 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
     }
 
     try {
-      const { error: insertError } = await supabase
+      // Create a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timed out. Please try again.')), 10000);
+      });
+
+      // Create the insert promise
+      const insertPromise = supabase
         .from('Clubs')
         .insert([
           {
             name: clubName.trim(),
             numberOfCourts: numberOfCourts,
-            country: country.trim() || null,
-            province: province.trim() || null,
+            country: country && country.trim() ? country.trim() : null,
+            province: province && province.trim() ? province.trim() : null,
             is_active: true,
           },
-        ]);
+        ])
+        .select();
+
+      // Race between insert and timeout
+      const result = await Promise.race([
+        insertPromise,
+        timeoutPromise,
+      ]);
+      
+      const { data, error: insertError } = result;
 
       if (insertError) {
-        throw new Error(insertError.message);
+        console.error('Supabase insert error:', insertError);
+        throw new Error(insertError.message || 'Failed to create club');
       }
+
+      console.log('Club created successfully:', data);
 
       // Reset form and close modal
       setClubName('');
       setNumberOfCourts(1);
       setCountry('');
       setProvince('');
-      setShowAddModal(false);
       setError('');
+      setShowAddModal(false);
+      
+      // Refresh the clubs list
       onRefresh();
     } catch (err: any) {
       console.error('Error creating club:', err);
-      setError(err.message || 'Failed to create club');
+      const errorMessage = err.message || 'Failed to create club. Please check the console for details.';
+      setError(errorMessage);
+      // Ensure error is visible by scrolling to it
+      setTimeout(() => {
+        const errorElement = document.querySelector(`.${styles.errorMessage}`);
+        if (errorElement) {
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
     } finally {
       setIsSubmitting(false);
     }
@@ -512,6 +702,44 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
                   {[club.province, club.country].filter(Boolean).join(', ')}
                 </p>
               )}
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <Link 
+                    href={`/club/${generateSlug(club.name)}`}
+                    className={styles.btnView}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    View
+                  </Link>
+                  <Link 
+                    href={`/admin/clubs/${club.id}/edit`}
+                    className={styles.btnEdit}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    Edit
+                  </Link>
+                  <Link 
+                    href={`/club/${generateSlug(club.name)}/admin`}
+                    className={styles.btnManage}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    Manage
+                  </Link>
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -568,15 +796,20 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
 
               <div className={styles.formGroup}>
                 <label htmlFor="country">Country</label>
-                <input
+                <select
                   id="country"
-                  type="text"
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
-                  placeholder="Enter country"
                   disabled={isSubmitting}
                   className={styles.formInput}
-                />
+                >
+                  <option value="">Select a country</option>
+                  {COUNTRIES.map((countryName) => (
+                    <option key={countryName} value={countryName}>
+                      {countryName}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className={styles.formGroup}>
@@ -613,6 +846,7 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
           </div>
         </div>
       )}
+
     </div>
   );
 }

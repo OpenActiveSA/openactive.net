@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getSupabaseClientClient } from '@/lib/supabase';
 import styles from './AuthScreen.module.css';
 
 export function AuthScreen() {
@@ -43,19 +44,61 @@ export function AuthScreen() {
     alert('Coming Soon\nFacebook sign-in will be available soon');
   };
 
+  const handleQuickLogin = async () => {
+    const testEmail = 'jb@openactive.co.za';
+    const testPassword = 'Su5ver303#';
+    
+    setIsLoading(true);
+    
+    try {
+      const supabase = getSupabaseClientClient();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: testEmail,
+        password: testPassword,
+      });
+
+      if (authError) {
+        alert(`Quick login failed: ${authError.message}`);
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        // Update last login in Users table
+        try {
+          await supabase
+            .from('Users')
+            .update({ lastLoginAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+            .eq('id', data.user.id.toString());
+        } catch (err) {
+          console.error('Error updating last login:', err);
+        }
+        
+        // Navigate to clubs page
+        router.push('/clubs');
+      }
+    } catch (err: any) {
+      console.error('Quick login error:', err);
+      alert(`Quick login failed: ${err.message || 'Please try again.'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className={styles.container}>
       {!showEmailModal && (
         <div className={styles.content}>
-        {/* Logo */}
-        <div className={styles.logoContainer}>
-          <div className={styles.logo}>
-            <img src="/open-logo.svg" alt="Open Active Logo" className={styles.logoImage} />
-          </div>
+        {/* OpenActive Font Icons - Spelling "OPEN" */}
+        <div className={styles.iconRow}>
+          <i className="oa-open-o" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+          <i className="oa-open-p" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+          <i className="oa-open-e" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+          <i className="oa-open-n" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
         </div>
 
         {/* Title */}
-        <h1 className={styles.title}>Log in or sign up</h1>
+        <h1 className={styles.title}>Log in or sign up</h1> {/* Force refresh */}
         <p className={styles.subtitle}>Your game starts here</p>
 
         {/* Google Button */}
@@ -94,6 +137,21 @@ export function AuthScreen() {
           <span className={styles.socialButtonText}>Continue with email</span>
         </button>
 
+        {/* Temporary Quick Login Button for Testing */}
+        <button 
+          className={styles.socialButton}
+          style={{ 
+            backgroundColor: 'rgba(255, 193, 7, 0.2)', 
+            border: '1px solid rgba(255, 193, 7, 0.4)',
+            marginTop: '12px'
+          }}
+          onClick={handleQuickLogin}
+          disabled={isLoading}
+        >
+          <span style={{ fontSize: '18px' }}>⚡</span>
+          <span className={styles.socialButtonText}>Quick Login (Test)</span>
+        </button>
+
         {/* Terms */}
         <p className={styles.termsText}>
           By registering you are accepting our{' '}
@@ -119,11 +177,12 @@ export function AuthScreen() {
               ← Back
             </button>
 
-            {/* Logo */}
-            <div className={styles.logoContainer}>
-              <div className={styles.logo}>
-                <img src="/open-logo.svg" alt="Open Active Logo" className={styles.logoImage} />
-              </div>
+            {/* OpenActive Font Icons - Spelling "OPEN" */}
+            <div className={styles.iconRow}>
+              <i className="oa-open-o" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+              <i className="oa-open-p" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+              <i className="oa-open-e" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
+              <i className="oa-open-n" style={{ fontSize: '32px', color: '#ffffff', opacity: 1.0, display: 'inline-block', lineHeight: '1', minWidth: '32px' }}></i>
             </div>
 
             {/* Title */}
