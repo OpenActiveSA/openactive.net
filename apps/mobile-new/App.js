@@ -79,6 +79,7 @@ export default function App() {
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(null);
   const [availablePlayers, setAvailablePlayers] = useState([]);
   const [coaches, setCoaches] = useState([]);
+  const [logoError, setLogoError] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
@@ -859,6 +860,11 @@ export default function App() {
     }
   }, [isAuthenticated, selectedClub, selectedDate, selectedTime]);
   
+  // Reset logo error when club changes
+  useEffect(() => {
+    setLogoError(false);
+  }, [selectedClub?.id]);
+  
   // Filter players based on search term
   const filteredPlayers = useMemo(() => {
     if (!playerSearchTerm.trim()) return availablePlayers.slice(0, 10);
@@ -915,26 +921,50 @@ export default function App() {
                 }
               }
               
-              if (logoUri) {
+              console.log('[App] ClubDetail Logo rendering check:', {
+                hasSelectedClub: !!selectedClub,
+                clubId: selectedClub?.id,
+                logoValue: selectedClub?.logo,
+                logoType: typeof selectedClub?.logo,
+                logoUri,
+                logoError
+              });
+              
+              if (logoUri && !logoError) {
+                console.log('[App] ClubDetail Rendering logo image:', logoUri);
                 return (
                   <Image
                     key={`header-logo-${selectedClub.id || 'unknown'}`}
                     source={{ uri: logoUri }}
                     style={styles.clubHeaderLogoImage}
                     resizeMode="contain"
+                    onError={(error) => {
+                      console.log('[App] ClubDetail Logo failed to load:', logoUri, error);
+                      console.log('[App] Error details:', JSON.stringify(error, null, 2));
+                      setLogoError(true);
+                    }}
+                    onLoad={() => {
+                      console.log('[App] ClubDetail Logo loaded successfully:', logoUri);
+                      setLogoError(false);
+                    }}
+                    onLoadStart={() => {
+                      console.log('[App] ClubDetail Logo loading started:', logoUri);
+                    }}
                   />
                 );
               }
               
-              return null;
-            })() || (
-              <View style={styles.clubHeaderLogoIcons}>
-                <OpenActiveIcon name="open-o" size={24} color="#052333" opacity={1.0} />
-                <OpenActiveIcon name="open-p" size={24} color="#052333" opacity={1.0} />
-                <OpenActiveIcon name="open-e" size={24} color="#052333" opacity={1.0} />
-                <OpenActiveIcon name="open-n" size={24} color="#052333" opacity={1.0} />
-              </View>
-            )}
+              // Fallback to OpenActive icons if no logo is set or logo failed to load
+              console.log('[App] ClubDetail Rendering OpenActive icons fallback');
+              return (
+                <View style={styles.clubHeaderLogoIcons}>
+                  <OpenActiveIcon name="open-o" size={24} color="#052333" opacity={1.0} />
+                  <OpenActiveIcon name="open-p" size={24} color="#052333" opacity={1.0} />
+                  <OpenActiveIcon name="open-e" size={24} color="#052333" opacity={1.0} />
+                  <OpenActiveIcon name="open-n" size={24} color="#052333" opacity={1.0} />
+                </View>
+              );
+            })()}
           </View>
           <View style={styles.clubHeaderRight}>
             <TouchableOpacity
@@ -1833,26 +1863,50 @@ export default function App() {
                 }
               }
               
-              if (logoUri) {
+              console.log('[App] PlayerSelection Logo rendering check:', {
+                hasSelectedClub: !!selectedClub,
+                clubId: selectedClub?.id,
+                logoValue: selectedClub?.logo,
+                logoType: typeof selectedClub?.logo,
+                logoUri,
+                logoError
+              });
+              
+              if (logoUri && !logoError) {
+                console.log('[App] PlayerSelection Rendering logo image:', logoUri);
                 return (
                   <Image
                     key={`header-logo-${selectedClub.id || 'unknown'}`}
                     source={{ uri: logoUri }}
                     style={styles.clubHeaderLogoImage}
                     resizeMode="contain"
+                    onError={(error) => {
+                      console.log('[App] PlayerSelection Logo failed to load:', logoUri, error);
+                      console.log('[App] Error details:', JSON.stringify(error, null, 2));
+                      setLogoError(true);
+                    }}
+                    onLoad={() => {
+                      console.log('[App] PlayerSelection Logo loaded successfully:', logoUri);
+                      setLogoError(false);
+                    }}
+                    onLoadStart={() => {
+                      console.log('[App] PlayerSelection Logo loading started:', logoUri);
+                    }}
                   />
                 );
               }
               
-              return null;
-            })() || (
-              <View style={styles.clubHeaderLogoIcons}>
-                <OpenActiveIcon name="open-o" size={24} color="#052333" opacity={1.0} />
-                <OpenActiveIcon name="open-p" size={24} color="#052333" opacity={1.0} />
-                <OpenActiveIcon name="open-e" size={24} color="#052333" opacity={1.0} />
-                <OpenActiveIcon name="open-n" size={24} color="#052333" opacity={1.0} />
-              </View>
-            )}
+              // Fallback to OpenActive icons if no logo is set or logo failed to load
+              console.log('[App] PlayerSelection Rendering OpenActive icons fallback');
+              return (
+                <View style={styles.clubHeaderLogoIcons}>
+                  <OpenActiveIcon name="open-o" size={24} color="#052333" opacity={1.0} />
+                  <OpenActiveIcon name="open-p" size={24} color="#052333" opacity={1.0} />
+                  <OpenActiveIcon name="open-e" size={24} color="#052333" opacity={1.0} />
+                  <OpenActiveIcon name="open-n" size={24} color="#052333" opacity={1.0} />
+                </View>
+              );
+            })()}
           </View>
           
           {/* Right side - Burger menu and profile */}
@@ -3254,15 +3308,21 @@ const styles = StyleSheet.create({
   },
   clubHeaderLogo: {
     flexShrink: 0,
+    minWidth: 100,
+    minHeight: 60,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   clubHeaderLogoImage: {
-    height: 40,
-    width: 'auto',
+    height: 60,
+    width: 200,
+    maxWidth: 200,
   },
   clubHeaderLogoIcons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    minWidth: 100,
   },
   clubHeaderRight: {
     flexDirection: 'row',

@@ -101,7 +101,7 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                 src={logo} 
                 alt="Club logo" 
                 style={{ 
-                  height: '40px',
+                  height: '60px',
                   width: 'auto',
                   objectFit: 'contain'
                 }}
