@@ -40,7 +40,6 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
   const [sessionDuration, setSessionDuration] = useState<number[]>([60]);
   const [openingTime, setOpeningTime] = useState<string>('06:00');
   const [closingTime, setClosingTime] = useState<string>('22:00');
-  const [hoverColor, setHoverColor] = useState<string>('#f0f0f0');
   const [isSaving, setIsSaving] = useState(false);
   const [scheduleRules, setScheduleRules] = useState<Array<{
     id: string;
@@ -124,7 +123,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
       // First attempt: with all columns including branding and booking settings
       const result = await supabase
         .from('Clubs')
-        .select('id, name, country, province, is_active, backgroundColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
+        .select('id, name, country, province, is_active, backgroundColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
         .order('createdAt', { ascending: false });
       
       clubsData = result.data;
@@ -135,7 +134,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
         console.warn('Some columns may not exist, trying with basic fields:', clubsError);
         const fallbackResult = await supabase
           .from('Clubs')
-          .select('id, name, country, province, is_active, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
+          .select('id, name, country, province, is_active, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
           .order('createdAt', { ascending: false });
         
         clubsData = fallbackResult.data;
@@ -191,15 +190,6 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
         if (!isNaN(interval) && interval > 0) {
           setBookingSlotInterval(interval);
         }
-      }
-      const clubHoverColor = (foundClub as any).hoverColor;
-      console.log('Loading hoverColor from database. Raw value:', clubHoverColor, 'Type:', typeof clubHoverColor);
-      if (clubHoverColor && typeof clubHoverColor === 'string' && clubHoverColor.trim() !== '') {
-        const loadedHoverColor = clubHoverColor.trim();
-        console.log('Setting hoverColor to:', loadedHoverColor);
-        setHoverColor(loadedHoverColor);
-      } else {
-        console.log('No valid hoverColor found, keeping default:', hoverColor);
       }
       if ((foundClub as any).sessionDuration !== null && (foundClub as any).sessionDuration !== undefined) {
         // Handle both array and single value (for backward compatibility)
@@ -1110,62 +1100,6 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                   </div>
                 </div>
 
-                {/* Hover Color Setting */}
-                <div className={adminStyles.formGroup} style={{ marginTop: '24px' }}>
-                  <label className={adminStyles.formLabel}>
-                    Hover Color
-                  </label>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <input
-                      type="color"
-                      value={hoverColor}
-                      onChange={(e) => setHoverColor(e.target.value)}
-                      disabled={isSaving}
-                      style={{ 
-                        width: '60px', 
-                        height: '40px', 
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        backgroundColor: 'rgba(255, 255, 255, 0.05)'
-                      }}
-                    />
-                    <input
-                      type="text"
-                      value={hoverColor}
-                      onChange={(e) => setHoverColor(e.target.value)}
-                      placeholder="#f0f0f0"
-                      disabled={isSaving}
-                      style={{
-                        padding: '8px 12px',
-                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        borderRadius: '6px',
-                        color: '#ffffff',
-                        fontSize: '14px',
-                        flex: 1,
-                        outline: 'none'
-                      }}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
-                        e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                        e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-                      }}
-                    />
-                  </div>
-                  <p style={{ 
-                    color: 'rgba(255, 255, 255, 0.6)', 
-                    fontSize: '12px', 
-                    marginTop: '8px',
-                    marginBottom: 0
-                  }}>
-                    Color used when hovering over date and time buttons
-                  </p>
-                </div>
-
                 {/* Save Button */}
                 <div style={{
                   display: 'flex',
@@ -1190,7 +1124,6 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                           : parseInt(String(bookingSlotInterval), 10);
                         
                         console.log('Saving settings:', {
-                          hoverColor: hoverColor,
                           bookingSlotInterval,
                           intervalToSave,
                           openingTime,
@@ -1215,7 +1148,6 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                             membersBookingDays: membersBookingDays,
                             visitorBookingDays: visitorBookingDays,
                             coachBookingDays: coachBookingDays,
-                            hoverColor: hoverColor,
                           }),
                         });
 
@@ -1230,8 +1162,6 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                           console.warn('Warning from API:', result.warning);
                           alert('Settings saved, but some fields may not have been updated. Check console for details.');
                         }
-                        console.log('hoverColor sent:', hoverColor);
-                        console.log('hoverColor in response:', result.data?.hoverColor);
 
                         // Reload club data to get updated values
                         hasLoadedRef.current = false;

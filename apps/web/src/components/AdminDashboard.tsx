@@ -749,7 +749,7 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [clubName, setClubName] = useState('');
-  const [numberOfCourts, setNumberOfCourts] = useState<number>(1);
+  const [city, setCity] = useState('');
   const [country, setCountry] = useState('');
   const [province, setProvince] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -808,11 +808,6 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
       return;
     }
 
-    if (numberOfCourts < 1) {
-      setError('Number of courts must be at least 1');
-      setIsSubmitting(false);
-      return;
-    }
 
     try {
       // Create a timeout promise
@@ -821,17 +816,22 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
       });
 
       // Create the insert promise
+      // Build insert data object
+      const insertData: any = {
+        name: clubName.trim(),
+        country: country && country.trim() ? country.trim() : null,
+        province: province && province.trim() ? province.trim() : null,
+        is_active: true,
+      };
+      
+      // Only include city if it has a value (and column exists)
+      if (city && city.trim()) {
+        insertData.city = city.trim();
+      }
+      
       const insertPromise = supabase
         .from('Clubs')
-        .insert([
-          {
-            name: clubName.trim(),
-            numberOfCourts: numberOfCourts,
-            country: country && country.trim() ? country.trim() : null,
-            province: province && province.trim() ? province.trim() : null,
-            is_active: true,
-          },
-        ])
+        .insert([insertData])
         .select();
 
       // Race between insert and timeout
@@ -843,15 +843,22 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
       const { data, error: insertError } = result;
 
       if (insertError) {
-        console.error('Supabase insert error:', insertError);
-        throw new Error(insertError.message || 'Failed to create club');
+        console.error('Supabase insert error:', {
+          code: insertError.code,
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          fullError: insertError
+        });
+        const errorMsg = insertError.message || insertError.details || insertError.hint || 'Failed to create club';
+        throw new Error(errorMsg);
       }
 
       console.log('Club created successfully:', data);
 
       // Reset form and close modal
       setClubName('');
-      setNumberOfCourts(1);
+      setCity('');
       setCountry('');
       setProvince('');
       setError('');
@@ -860,7 +867,11 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
       // Refresh the clubs list
       onRefresh();
     } catch (err: any) {
-      console.error('Error creating club:', err);
+      console.error('Error creating club:', {
+        message: err.message,
+        stack: err.stack,
+        fullError: err
+      });
       const errorMessage = err.message || 'Failed to create club. Please check the console for details.';
       setError(errorMessage);
       // Ensure error is visible by scrolling to it
@@ -1017,20 +1028,6 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
               </div>
 
               <div className={styles.formGroup}>
-                <label htmlFor="numberOfCourts">Number of Courts</label>
-                <input
-                  id="numberOfCourts"
-                  type="number"
-                  min="1"
-                  value={numberOfCourts}
-                  onChange={(e) => setNumberOfCourts(parseInt(e.target.value) || 1)}
-                  required
-                  disabled={isSubmitting}
-                  className={styles.formInput}
-                />
-              </div>
-
-              <div className={styles.formGroup}>
                 <label htmlFor="country">Country</label>
                 <select
                   id="country"
@@ -1056,6 +1053,19 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
                   value={province}
                   onChange={(e) => setProvince(e.target.value)}
                   placeholder="Enter province or state"
+                  disabled={isSubmitting}
+                  className={styles.formInput}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="city">City / Town</label>
+                <input
+                  id="city"
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Enter city or town"
                   disabled={isSubmitting}
                   className={styles.formInput}
                 />

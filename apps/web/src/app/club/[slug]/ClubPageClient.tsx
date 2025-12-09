@@ -598,8 +598,23 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
         {/* Court Selection */}
         <div className={styles.courtSelection}>
           {isLoadingCourts ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: fontColor, opacity: 0.7 }}>
-              Loading courts...
+            <div className={styles.openLoader}>
+              <span
+                className={`oa-open-o ${styles.openLoaderLetter}`}
+                style={{ animationDelay: '0s' }}
+              />
+              <span
+                className={`oa-open-p ${styles.openLoaderLetter}`}
+                style={{ animationDelay: '0.15s' }}
+              />
+              <span
+                className={`oa-open-e ${styles.openLoaderLetter}`}
+                style={{ animationDelay: '0.3s' }}
+              />
+              <span
+                className={`oa-open-n ${styles.openLoaderLetter}`}
+                style={{ animationDelay: '0.45s' }}
+              />
             </div>
           ) : displayCourts.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: fontColor, opacity: 0.7 }}>
@@ -829,8 +844,23 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
         {selectedDate && !selectedTime && (
           <div className={styles.courtSelection}>
             {isLoadingCourts ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: fontColor, opacity: 0.7 }}>
-                Loading courts...
+              <div className={styles.openLoader}>
+                <span
+                  className={`oa-open-o ${styles.openLoaderLetter}`}
+                  style={{ animationDelay: '0s' }}
+                />
+                <span
+                  className={`oa-open-p ${styles.openLoaderLetter}`}
+                  style={{ animationDelay: '0.15s' }}
+                />
+                <span
+                  className={`oa-open-e ${styles.openLoaderLetter}`}
+                  style={{ animationDelay: '0.3s' }}
+                />
+                <span
+                  className={`oa-open-n ${styles.openLoaderLetter}`}
+                  style={{ animationDelay: '0.45s' }}
+                />
               </div>
             ) : displayCourts.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: fontColor, opacity: 0.7 }}>
