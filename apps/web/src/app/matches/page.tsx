@@ -27,6 +27,7 @@ interface Booking {
   duration: number;
   bookingType: 'singles' | 'doubles';
   status: string;
+  userId?: string;
   players?: Player[];
   hasGuest?: boolean;
 }
@@ -70,6 +71,7 @@ export default function ManageMatchesPage() {
             duration,
             bookingType,
             status,
+            userId,
             player1Id,
             player2Id,
             player3Id,
