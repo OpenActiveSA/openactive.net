@@ -41,3 +41,7 @@ COMMIT;
 -- AND table_name = 'Clubs'
 -- AND column_name = 'city';
 
+
+
+
+

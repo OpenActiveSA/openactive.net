@@ -134,11 +134,23 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
         console.warn('Some columns may not exist, trying with basic fields:', clubsError);
         const fallbackResult = await supabase
           .from('Clubs')
-          .select('id, name, country, province, is_active, logo, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, createdAt')
+          .select('id, name, country, province, is_active, logo, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
           .order('createdAt', { ascending: false });
         
         clubsData = fallbackResult.data;
         clubsError = fallbackResult.error;
+        
+        // If still error, try with absolute minimum fields
+        if (clubsError && (clubsError.code === '42703' || clubsError.message?.includes('column'))) {
+          console.warn('Trying with absolute minimum fields:', clubsError);
+          const minimalResult = await supabase
+            .from('Clubs')
+            .select('id, name, country, province, is_active, createdAt')
+            .order('createdAt', { ascending: false });
+          
+          clubsData = minimalResult.data;
+          clubsError = minimalResult.error;
+        }
       }
 
       if (clubsError) {

@@ -55,3 +55,7 @@ WHERE table_schema = 'public'
 AND table_name = 'Clubs'
 ORDER BY ordinal_position;
 
+
+
+
+

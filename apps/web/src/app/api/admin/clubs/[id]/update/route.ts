@@ -123,12 +123,24 @@ export async function PUT(
     error = result.error;
     console.log('Update result:', { data: data ? { ...data, logo: data.logo } : null, error });
 
-    // If error is about missing columns, try without branding fields
+    // If error is about missing columns, try without optional fields
     if (error && (error.code === '42703' || error.message?.includes('column') || error.message?.includes('schema cache') || error.message?.includes('Could not find'))) {
-      console.warn('Missing column detected, trying update without branding fields');
+      console.warn('Missing column detected, trying update without optional fields');
       console.log('Update data before fallback:', updateData);
-      // Only remove fields that might not exist, but keep logo if it was provided
-      const { backgroundImage: __, backgroundColor: ___, selectedColor: ____, actionColor: _____, fontColor: ______, hoverColor: _______, sessionDuration: ________, ...basicUpdateData } = updateData;
+      // Remove fields that might not exist, but keep logo and basic fields
+      const { 
+        backgroundImage: __, 
+        backgroundColor: ___, 
+        selectedColor: ____, 
+        actionColor: _____, 
+        fontColor: ______, 
+        hoverColor: _______, 
+        sessionDuration: ________,
+        membersBookingDays: _________,
+        visitorBookingDays: __________,
+        coachBookingDays: ___________,
+        ...basicUpdateData 
+      } = updateData;
       // Keep logo in basicUpdateData if it was provided
       if (updateData.logo !== undefined) {
         basicUpdateData.logo = updateData.logo;
@@ -145,11 +157,11 @@ export async function PUT(
       error = basicResult.error;
       
       if (!error && data) {
-        // Update succeeded without branding fields
+        // Update succeeded without optional fields
         return NextResponse.json({ 
           success: true, 
           data,
-          warning: 'Some branding fields were not updated because the columns do not exist in the database. Please run the migration script: ADD_ALL_CLUB_BRANDING_COLUMNS.sql (or ADD_CLUB_HOVER_COLOR.sql if only hoverColor is missing)'
+          warning: 'Some fields were not updated because the columns do not exist in the database. Please run the migration scripts: ADD_ALL_CLUB_BRANDING_COLUMNS.sql and ADD_CLUB_BOOKING_DAYS_COLUMNS.sql'
         });
       }
     }

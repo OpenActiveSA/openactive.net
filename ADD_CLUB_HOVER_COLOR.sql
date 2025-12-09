@@ -29,3 +29,7 @@ WHERE table_schema = 'public'
 AND table_name = 'Clubs'
 AND column_name = 'hoverColor';
 
+
+
+
+
