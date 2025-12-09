@@ -181,6 +181,42 @@ export default function ConfirmBookingPage() {
       // Get court number from court name (extract number or use 1 as default)
       const courtNumber = court ? parseInt(court.replace(/\D/g, '')) || 1 : 1;
       
+      // Check for overlapping bookings before creating the new booking
+      // Query for existing bookings on the same court, same date, with active status
+      // Match by courtNumber since that's the reliable identifier
+      const { data: existingBookings, error: checkError } = await supabase
+        .from('Bookings')
+        .select('id, startTime, endTime, courtId, courtNumber')
+        .eq('clubId', club.id)
+        .eq('bookingDate', date)
+        .eq('courtNumber', courtNumber)
+        .in('status', ['pending', 'confirmed']);
+      
+      if (checkError) {
+        console.error('Error checking for overlapping bookings:', checkError);
+        throw new Error('Failed to check booking availability. Please try again.');
+      }
+      
+      // Check if the new booking overlaps with any existing booking
+      // Two time slots overlap if: new start < existing end AND new end > existing start
+      const newStartMinutes = hours * 60 + minutes;
+      const newEndMinutes = newStartMinutes + parseInt(duration);
+      
+      const hasOverlap = existingBookings?.some((existingBooking) => {
+        // Parse existing booking times
+        const [existingStartHour, existingStartMin] = existingBooking.startTime.split(':').map(Number);
+        const [existingEndHour, existingEndMin] = existingBooking.endTime.split(':').map(Number);
+        const existingStartMinutes = existingStartHour * 60 + existingStartMin;
+        const existingEndMinutes = existingEndHour * 60 + existingEndMin;
+        
+        // Check for overlap: new start < existing end AND new end > existing start
+        return newStartMinutes < existingEndMinutes && newEndMinutes > existingStartMinutes;
+      });
+      
+      if (hasOverlap) {
+        throw new Error('This time slot is already booked. Please select a different time.');
+      }
+      
       // Prepare booking data
       const bookingData: any = {
         clubId: club.id,

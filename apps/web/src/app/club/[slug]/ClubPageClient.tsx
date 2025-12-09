@@ -7,6 +7,7 @@ import { getSupabaseClientClient } from '@/lib/supabase';
 import { getClubCourts, SPORT_TYPE_LABELS, type Court } from '@/lib/courts';
 import ClubHeader from './ClubHeader';
 import ClubFooter from './ClubFooter';
+import ClubNotifications from './ClubNotifications';
 import styles from '@/styles/frontend.module.css';
 
 interface Club {
@@ -454,6 +455,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
       } as React.CSSProperties}
     >
       <ClubHeader logo={logo} fontColor={fontColor} backgroundColor={backgroundColor} selectedColor={selectedColor} currentPath={`/club/${slug}`} />
+      <ClubNotifications clubId={club?.id || null} fontColor={fontColor} />
       <div 
         className={styles.container} 
         style={{ 

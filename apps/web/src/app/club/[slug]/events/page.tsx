@@ -6,6 +6,7 @@ import { getSupabaseClientClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
 import ClubHeader from '../ClubHeader';
 import ClubFooter from '../ClubFooter';
+import ClubNotifications from '../ClubNotifications';
 
 export default function ClubEventsPage() {
   const params = useParams();
@@ -30,6 +31,7 @@ export default function ClubEventsPage() {
         if (clubsData) {
           const club = clubsData.find(c => generateSlug(c.name) === slug);
           if (club) {
+            setClubId(club.id);
             setBackgroundColor(club.backgroundColor || '#052333');
             setFontColor(club.fontColor || '#ffffff');
             setSelectedColor(club.selectedColor || '#667eea');
@@ -80,6 +82,7 @@ export default function ClubEventsPage() {
         selectedColor={selectedColor}
         currentPath={`/club/${slug}/events`}
       />
+      <ClubNotifications clubId={clubId} fontColor={fontColor} />
       
       <div style={{ 
         flex: 1, 

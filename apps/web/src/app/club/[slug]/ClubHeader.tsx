@@ -451,6 +451,32 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                     </Link>
                   )}
                   
+                  {currentPath && currentPath.includes('/club/') && (
+                    <Link 
+                      href={`${currentPath.split('/').slice(0, 3).join('/')}/members`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 16px',
+                        color: '#052333',
+                        textDecoration: 'none',
+                        fontSize: '14px',
+                        borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                      onClick={() => setShowDropdown(false)}
+                    >
+                      <span style={{ fontSize: '18px' }}>👥</span>
+                      <span>Club Members</span>
+                    </Link>
+                  )}
+                  
                   <Link 
                     href="/documents" 
                     style={{
