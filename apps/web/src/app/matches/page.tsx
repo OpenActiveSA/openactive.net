@@ -88,6 +88,9 @@ export default function ManageMatchesPage() {
           console.error('Error loading bookings:', bookingsError);
         }
 
+        // Declare processedBookings outside the if block so it's accessible later
+        let processedBookings: Booking[] = [];
+
         if (bookingsData) {
           // Load club names and court names
           const clubIds = [...new Set(bookingsData.map(b => b.clubId))];
@@ -123,7 +126,7 @@ export default function ManageMatchesPage() {
           }
 
           // Process bookings with players
-          const processedBookings = await Promise.all(bookingsData.map(async (booking) => {
+          processedBookings = await Promise.all(bookingsData.map(async (booking) => {
             const players: Player[] = [];
             let hasGuest = false;
 
