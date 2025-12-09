@@ -708,7 +708,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                             width: '100%',
                             maxWidth: isSingles ? '200px' : '100%'
                           }}>
-                            {players.map((player, index) => (
+                            {players.map((player: { id?: string; name: string; isGuest: boolean; isPrimary: boolean }, index: number) => (
                               <div
                                 key={index}
                                 style={{
