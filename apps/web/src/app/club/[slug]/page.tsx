@@ -66,6 +66,8 @@ export default async function ClubPage({ params }: ClubPageProps) {
 
       if (foundClub) {
         club = foundClub as Club;
+        // Log the logo value from database
+        console.log('Found club logo from database:', (foundClub as any).logo);
         // Only use backgroundColor if it exists and is not empty
         const clubBgColor = (foundClub as any).backgroundColor;
         if (clubBgColor && typeof clubBgColor === 'string' && clubBgColor.trim() !== '') {
@@ -137,6 +139,8 @@ export default async function ClubPage({ params }: ClubPageProps) {
   console.log('Club page props:', { 
     clubId: club?.id, 
     clubName: club?.name,
+    logo: logo,
+    rawLogo: (club as any)?.logo,
     openingTime, 
     closingTime, 
     bookingSlotInterval,

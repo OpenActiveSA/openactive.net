@@ -84,8 +84,33 @@ export async function PUT(
         updateData.sessionDuration = [60]; // Default to [60] if empty or invalid
       }
     }
+    if (body.membersBookingDays !== undefined) {
+      const days = typeof body.membersBookingDays === 'number' 
+        ? body.membersBookingDays 
+        : (body.membersBookingDays ? parseInt(String(body.membersBookingDays), 10) : null);
+      if (days !== null && !isNaN(days) && days > 0) {
+        updateData.membersBookingDays = days;
+      }
+    }
+    if (body.visitorBookingDays !== undefined) {
+      const days = typeof body.visitorBookingDays === 'number' 
+        ? body.visitorBookingDays 
+        : (body.visitorBookingDays ? parseInt(String(body.visitorBookingDays), 10) : null);
+      if (days !== null && !isNaN(days) && days > 0) {
+        updateData.visitorBookingDays = days;
+      }
+    }
+    if (body.coachBookingDays !== undefined) {
+      const days = typeof body.coachBookingDays === 'number' 
+        ? body.coachBookingDays 
+        : (body.coachBookingDays ? parseInt(String(body.coachBookingDays), 10) : null);
+      if (days !== null && !isNaN(days) && days > 0) {
+        updateData.coachBookingDays = days;
+      }
+    }
 
     // Perform the update - try with all fields first
+    console.log('Updating club with data:', JSON.stringify(updateData, null, 2));
     let data, error;
     const result = await supabase
       .from('Clubs')
@@ -96,11 +121,18 @@ export async function PUT(
     
     data = result.data;
     error = result.error;
+    console.log('Update result:', { data: data ? { ...data, logo: data.logo } : null, error });
 
     // If error is about missing columns, try without branding fields
     if (error && (error.code === '42703' || error.message?.includes('column') || error.message?.includes('schema cache') || error.message?.includes('Could not find'))) {
       console.warn('Missing column detected, trying update without branding fields');
-      const { logo: _, backgroundImage: __, backgroundColor: ___, selectedColor: ____, actionColor: _____, fontColor: ______, hoverColor: _______, sessionDuration: ________, ...basicUpdateData } = updateData;
+      console.log('Update data before fallback:', updateData);
+      // Only remove fields that might not exist, but keep logo if it was provided
+      const { backgroundImage: __, backgroundColor: ___, selectedColor: ____, actionColor: _____, fontColor: ______, hoverColor: _______, sessionDuration: ________, ...basicUpdateData } = updateData;
+      // Keep logo in basicUpdateData if it was provided
+      if (updateData.logo !== undefined) {
+        basicUpdateData.logo = updateData.logo;
+      }
       
       const basicResult = await supabase
         .from('Clubs')

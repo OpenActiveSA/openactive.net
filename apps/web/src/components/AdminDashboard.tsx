@@ -27,6 +27,12 @@ interface Club {
   province?: string;
   is_active?: boolean; // Keep for backwards compatibility
   status?: ClubStatus;
+  logo?: string;
+  backgroundColor?: string;
+  selectedColor?: string;
+  actionColor?: string;
+  fontColor?: string;
+  hoverColor?: string;
   createdAt?: string;
 }
 
@@ -63,26 +69,38 @@ export function AdminDashboard() {
 
       setUsers((usersData || []) as User[]);
 
-      // Load clubs - try with status first, fallback to without status if column doesn't exist
+      // Load clubs - try with all fields first, fallback if columns don't exist
       let clubsData, clubsError;
-      const resultWithStatus = await supabase
+      const resultWithAll = await supabase
         .from('Clubs')
-        .select('id, name, country, province, is_active, status, createdAt')
+        .select('id, name, country, province, is_active, status, logo, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
         .order('createdAt', { ascending: false });
       
-      clubsData = resultWithStatus.data;
-      clubsError = resultWithStatus.error;
+      clubsData = resultWithAll.data;
+      clubsError = resultWithAll.error;
 
-      // If error is about missing column (status), try without it
-      if (clubsError && (clubsError.code === '42703' || clubsError.message?.includes('column') || clubsError.message?.includes('status'))) {
-        console.warn('Status column not found, loading clubs without status field');
-        const resultWithoutStatus = await supabase
+      // If error is about missing columns, try without branding fields
+      if (clubsError && (clubsError.code === '42703' || clubsError.message?.includes('column'))) {
+        console.warn('Some columns not found, loading clubs without branding fields');
+        const resultWithoutBranding = await supabase
           .from('Clubs')
-          .select('id, name, country, province, is_active, createdAt')
+          .select('id, name, country, province, is_active, status, createdAt')
           .order('createdAt', { ascending: false });
         
-        clubsData = resultWithoutStatus.data;
-        clubsError = resultWithoutStatus.error;
+        clubsData = resultWithoutBranding.data;
+        clubsError = resultWithoutBranding.error;
+        
+        // If still error about status, try without status too
+        if (clubsError && (clubsError.code === '42703' || clubsError.message?.includes('status'))) {
+          console.warn('Status column not found, loading clubs without status field');
+          const resultWithoutStatus = await supabase
+            .from('Clubs')
+            .select('id, name, country, province, is_active, createdAt')
+            .order('createdAt', { ascending: false });
+          
+          clubsData = resultWithoutStatus.data;
+          clubsError = resultWithoutStatus.error;
+        }
       }
 
       if (clubsError) {

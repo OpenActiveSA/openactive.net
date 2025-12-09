@@ -145,8 +145,8 @@ export default function EditClubPage({ params }: EditClubProps) {
     }
   };
 
-  const loadClubData = useCallback(async () => {
-    if (hasLoadedRef.current) {
+  const loadClubData = useCallback(async (forceReload = false) => {
+    if (hasLoadedRef.current && !forceReload) {
       return;
     }
 
@@ -179,21 +179,24 @@ export default function EditClubPage({ params }: EditClubProps) {
       data = result.data;
       fetchError = result.error;
 
-      // If error and it's about missing columns, try without branding columns (but keep status)
+      // If error and it's about missing columns, try without status first (status might not exist)
       if (fetchError && (fetchError.code === '42703' || fetchError.message?.includes('column'))) {
-        console.warn('Some columns may not exist, trying without branding columns:', fetchError);
-        const fallbackResult = await supabase
-          .from('Clubs')
-          .select('id, name, country, province, is_active, status, createdAt')
-          .eq('id', id)
-          .single();
-        
-        data = fallbackResult.data;
-        fetchError = fallbackResult.error;
-
-        // If still error and it's about status column, try without status
-        if (fetchError && (fetchError.code === '42703' || fetchError.message?.includes('status'))) {
+        // First try without status column (most common missing column)
+        if (fetchError.message?.includes('status')) {
           console.warn('Status column does not exist, loading without it:', fetchError);
+          const fallbackResult = await supabase
+            .from('Clubs')
+            .select('id, name, country, province, is_active, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
+            .eq('id', id)
+            .single();
+          
+          data = fallbackResult.data;
+          fetchError = fallbackResult.error;
+        }
+        
+        // If still error, try with only basic fields (last resort)
+        if (fetchError && (fetchError.code === '42703' || fetchError.message?.includes('column'))) {
+          console.warn('Some branding columns may not exist, trying with basic fields only:', fetchError);
           const fallbackResult2 = await supabase
             .from('Clubs')
             .select('id, name, country, province, is_active, createdAt')
@@ -243,13 +246,41 @@ export default function EditClubPage({ params }: EditClubProps) {
         setStatus(data.is_active !== undefined && data.is_active ? 'ACTIVE_FREE' : 'DISABLED');
       }
       setIsActive(data.is_active !== undefined ? data.is_active : true);
-      setLogo((data as any).logo || '');
-      setBackgroundImage((data as any).backgroundImage || '');
-      setBackgroundColor((data as any).backgroundColor || '#ffffff');
-      setSelectedColor((data as any).selectedColor || '#667eea');
-      setActionColor((data as any).actionColor || '#10b981');
-      setFontColor((data as any).fontColor || '#052333');
-      setHoverColor((data as any).hoverColor || '#f0f0f0');
+      
+      // Log raw data and color values from database
+      console.log('Raw data from database:', data);
+      console.log('Loading colors from database:', {
+        backgroundColor: clubData.backgroundColor,
+        selectedColor: clubData.selectedColor,
+        actionColor: clubData.actionColor,
+        fontColor: clubData.fontColor,
+        hoverColor: clubData.hoverColor,
+        logo: clubData.logo,
+        backgroundImage: clubData.backgroundImage
+      });
+      
+      // Set branding fields - only use defaults if value is null/undefined/empty
+      if (clubData.logo !== undefined && clubData.logo !== null && clubData.logo !== '') {
+        setLogo(clubData.logo);
+      }
+      if (clubData.backgroundImage !== undefined && clubData.backgroundImage !== null && clubData.backgroundImage !== '') {
+        setBackgroundImage(clubData.backgroundImage);
+      }
+      if (clubData.backgroundColor !== undefined && clubData.backgroundColor !== null && clubData.backgroundColor.trim() !== '') {
+        setBackgroundColor(clubData.backgroundColor.trim());
+      }
+      if (clubData.selectedColor !== undefined && clubData.selectedColor !== null && clubData.selectedColor.trim() !== '') {
+        setSelectedColor(clubData.selectedColor.trim());
+      }
+      if (clubData.actionColor !== undefined && clubData.actionColor !== null && clubData.actionColor.trim() !== '') {
+        setActionColor(clubData.actionColor.trim());
+      }
+      if (clubData.fontColor !== undefined && clubData.fontColor !== null && clubData.fontColor.trim() !== '') {
+        setFontColor(clubData.fontColor.trim());
+      }
+      if (clubData.hoverColor !== undefined && clubData.hoverColor !== null && clubData.hoverColor.trim() !== '') {
+        setHoverColor(clubData.hoverColor.trim());
+      }
       
       // Load courts for this club (don't await - let it load in background)
       // This prevents courts loading from blocking the page render
@@ -720,6 +751,11 @@ export default function EditClubPage({ params }: EditClubProps) {
       } else {
         setSuccess('Club updated successfully!');
       }
+      
+      // Reload club data from database to get updated values
+      hasLoadedRef.current = false;
+      setClub(null); // Clear club to force reload
+      await loadClubData();
       
       // Clear success message after 5 seconds
       setTimeout(() => {

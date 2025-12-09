@@ -123,7 +123,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
       // First attempt: with all columns including branding and booking settings
       const result = await supabase
         .from('Clubs')
-        .select('id, name, country, province, is_active, backgroundColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
+        .select('id, name, country, province, is_active, backgroundColor, logo, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, createdAt')
         .order('createdAt', { ascending: false });
       
       clubsData = result.data;
@@ -134,7 +134,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
         console.warn('Some columns may not exist, trying with basic fields:', clubsError);
         const fallbackResult = await supabase
           .from('Clubs')
-          .select('id, name, country, province, is_active, openingTime, closingTime, bookingSlotInterval, sessionDuration, createdAt')
+          .select('id, name, country, province, is_active, logo, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, createdAt')
           .order('createdAt', { ascending: false });
         
         clubsData = fallbackResult.data;
@@ -219,6 +219,32 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
           if (!isNaN(duration) && duration > 0) {
             setSessionDuration([duration]);
           }
+        }
+      }
+      
+      // Load booking days settings
+      if ((foundClub as any).membersBookingDays !== null && (foundClub as any).membersBookingDays !== undefined) {
+        const days = typeof (foundClub as any).membersBookingDays === 'number' 
+          ? (foundClub as any).membersBookingDays 
+          : parseInt(String((foundClub as any).membersBookingDays), 10);
+        if (!isNaN(days) && days > 0) {
+          setMembersBookingDays(days);
+        }
+      }
+      if ((foundClub as any).visitorBookingDays !== null && (foundClub as any).visitorBookingDays !== undefined) {
+        const days = typeof (foundClub as any).visitorBookingDays === 'number' 
+          ? (foundClub as any).visitorBookingDays 
+          : parseInt(String((foundClub as any).visitorBookingDays), 10);
+        if (!isNaN(days) && days > 0) {
+          setVisitorBookingDays(days);
+        }
+      }
+      if ((foundClub as any).coachBookingDays !== null && (foundClub as any).coachBookingDays !== undefined) {
+        const days = typeof (foundClub as any).coachBookingDays === 'number' 
+          ? (foundClub as any).coachBookingDays 
+          : parseInt(String((foundClub as any).coachBookingDays), 10);
+        if (!isNaN(days) && days > 0) {
+          setCoachBookingDays(days);
         }
       }
       
@@ -1141,6 +1167,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                             country: club.country || null,
                             province: club.province || null,
                             is_active: club.is_active !== undefined ? club.is_active : true,
+                            logo: (club as any).logo || null,
                             openingTime: openingTime,
                             closingTime: closingTime,
                             bookingSlotInterval: intervalToSave,
