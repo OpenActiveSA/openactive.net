@@ -232,7 +232,7 @@ export default function EditClubPage({ params }: EditClubProps) {
 
       setClub(data as Club);
       setClubName(data.name);
-      setNumberOfCourts(data.numberOfCourts || 1);
+      // numberOfCourts is no longer used - courts are managed via the Courts table
       setCountry(data.country || '');
       setProvince(data.province || '');
       // Set status, fallback to is_active for backwards compatibility
@@ -485,7 +485,6 @@ export default function EditClubPage({ params }: EditClubProps) {
             },
             body: JSON.stringify({
               name: clubName,
-              numberOfCourts: numberOfCourts,
               country: country,
               province: province,
               status: status,
@@ -592,7 +591,6 @@ export default function EditClubPage({ params }: EditClubProps) {
             },
             body: JSON.stringify({
               name: clubName,
-              numberOfCourts: numberOfCourts,
               country: country,
               province: province,
               status: status,
