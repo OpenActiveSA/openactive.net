@@ -236,8 +236,9 @@ export default function EditClubPage({ params }: EditClubProps) {
       setCountry(data.country || '');
       setProvince(data.province || '');
       // Set status, fallback to is_active for backwards compatibility
-      if (data.status) {
-        setStatus(data.status);
+      const clubData = data as any;
+      if (clubData.status) {
+        setStatus(clubData.status);
       } else {
         setStatus(data.is_active !== undefined && data.is_active ? 'ACTIVE_FREE' : 'DISABLED');
       }
