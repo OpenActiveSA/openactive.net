@@ -18,6 +18,7 @@ interface ClubHeaderProps {
 export default function ClubHeader({ logo, fontColor, backgroundColor, selectedColor, currentPath }: ClubHeaderProps) {
   const [logoError, setLogoError] = useState(false);
   const [userName, setUserName] = useState<string>('');
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const { user, loading: authLoading, signOut } = useAuth();
   const pathname = usePathname();
@@ -30,20 +31,32 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
       if (user && user.id) {
         try {
           const supabase = getSupabaseClientClient();
-          const { data: userData } = await supabase
+          const { data: userData, error } = await supabase
             .from('Users')
-            .select('name, Firstname, Surname')
+            .select('Firstname, Surname, avatarUrl')
             .eq('id', user.id)
             .maybeSingle();
           
-          if (userData) {
-            const name = userData.name || 
-                        (userData.Firstname && userData.Surname 
-                          ? `${userData.Firstname} ${userData.Surname}` 
-                          : userData.Firstname || userData.Surname || '');
-            setUserName(name || user.email?.split('@')[0] || 'User');
-          } else {
+          if (error) {
+            console.error('Error fetching user name from database:', error);
             setUserName(user.email?.split('@')[0] || 'User');
+            setUserAvatar(null);
+            return;
+          }
+          
+          if (userData) {
+            console.log('Fetched user data from database:', userData);
+            const name = userData.Firstname && userData.Surname 
+                          ? `${userData.Firstname} ${userData.Surname}` 
+                          : userData.Firstname || userData.Surname || '';
+            const finalName = name || user.email?.split('@')[0] || 'User';
+            console.log('Setting user name to:', finalName);
+            setUserName(finalName);
+            setUserAvatar(userData.avatarUrl || null);
+          } else {
+            console.log('No user data found in database, using email fallback');
+            setUserName(user.email?.split('@')[0] || 'User');
+            setUserAvatar(null);
           }
         } catch (err) {
           console.error('Error fetching user name:', err);
@@ -51,6 +64,7 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
         }
       } else {
         setUserName('');
+        setUserAvatar(null);
       }
     };
     
@@ -126,7 +140,9 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
         {/* Logo - Left */}
         <div style={{ flexShrink: 0 }}>
           <Link 
-            href="/"
+            href={currentPath && currentPath.includes('/club/') 
+              ? currentPath.split('/').slice(0, 3).join('/') // Extract /club/[slug] from currentPath
+              : '/book'}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -208,34 +224,38 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             Book a court
           </Link>
           )}
-          <Link
-            href="/events"
-            className={styles.navLink}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '1';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '0.9';
-            }}
-          >
-            Events
-          </Link>
-          <Link
-            href="/rankings"
-            className={styles.navLink}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '1';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '0.9';
-            }}
-          >
-            Rankings
-          </Link>
+          {currentPath && currentPath.includes('/club/') && (
+            <Link
+              href={`${currentPath.split('/').slice(0, 3).join('/')}/events`}
+              className={styles.navLink}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '1';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '0.9';
+              }}
+            >
+              Events
+            </Link>
+          )}
+          {currentPath && currentPath.includes('/club/') && (
+            <Link
+              href={`${currentPath.split('/').slice(0, 3).join('/')}/rankings`}
+              className={styles.navLink}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '1';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '0.9';
+              }}
+            >
+              Rankings
+            </Link>
+          )}
         </nav>
 
         {/* User Name or Login Button - Right */}
-        <div style={{ flexShrink: 0, position: 'relative' }} ref={dropdownRef}>
+        <div style={{ flexShrink: 0, position: 'relative', display: 'flex', alignItems: 'center', gap: '12px' }} ref={dropdownRef}>
           {!authLoading && user ? (
             <>
               <div 
@@ -244,8 +264,6 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                   fontSize: '16px',
                   fontWeight: '500',
                   padding: '8px 20px',
-                  border: '1px solid #052333',
-                  borderRadius: '6px',
                   display: 'inline-block',
                   opacity: 0.9,
                   cursor: 'pointer',
@@ -255,15 +273,67 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                 onClick={() => setShowDropdown(!showDropdown)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.opacity = '1';
-                  e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.opacity = '0.9';
-                  e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
                 {userName || user.email?.split('@')[0] || 'User'}
                 <span style={{ marginLeft: '8px', fontSize: '12px' }}>▼</span>
+              </div>
+              
+              {/* Profile Picture */}
+              <div
+                onClick={() => setShowDropdown(!showDropdown)}
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  border: '2px solid #052333',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#f0f0f0'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.8';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                }}
+              >
+                {userAvatar ? (
+                  <img 
+                    src={userAvatar} 
+                    alt={userName || 'User'} 
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover'
+                    }}
+                    onError={(e) => {
+                      // Fallback to initials if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        const initials = userName
+                          ? userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                          : user.email?.[0].toUpperCase() || 'U';
+                        parent.innerHTML = `<span style="color: #052333; font-weight: 600; font-size: 14px;">${initials}</span>`;
+                      }
+                    }}
+                  />
+                ) : (
+                  <span style={{ color: '#052333', fontWeight: '600', fontSize: '14px' }}>
+                    {userName
+                      ? userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                      : user.email?.[0].toUpperCase() || 'U'}
+                  </span>
+                )}
               </div>
               
               {/* Dropdown Menu */}
@@ -281,29 +351,55 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                   zIndex: 1000,
                   overflow: 'hidden'
                 }}>
-                  <Link 
-                    href="/profile" 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#052333',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={() => setShowDropdown(false)}
-                  >
-                    <span style={{ fontSize: '18px' }}>👤</span>
-                    <span>My Profile</span>
-                  </Link>
+                  {currentPath && currentPath.includes('/club/') ? (
+                    <Link 
+                      href={`${currentPath.split('/').slice(0, 3).join('/')}/profile`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 16px',
+                        color: '#052333',
+                        textDecoration: 'none',
+                        fontSize: '14px',
+                        borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                      onClick={() => setShowDropdown(false)}
+                    >
+                      <span style={{ fontSize: '18px' }}>👤</span>
+                      <span>My Profile</span>
+                    </Link>
+                  ) : (
+                    <Link 
+                      href="/profile" 
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 16px',
+                        color: '#052333',
+                        textDecoration: 'none',
+                        fontSize: '14px',
+                        borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                      onClick={() => setShowDropdown(false)}
+                    >
+                      <span style={{ fontSize: '18px' }}>👤</span>
+                      <span>My Profile</span>
+                    </Link>
+                  )}
                   
                   <Link 
                     href="/matches" 
@@ -329,29 +425,31 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                     <span>Manage Matches</span>
                   </Link>
                   
-                  <Link 
-                    href="/events" 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#052333',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={() => setShowDropdown(false)}
-                  >
-                    <span style={{ fontSize: '18px' }}>📅</span>
-                    <span>Events</span>
-                  </Link>
+                  {currentPath && currentPath.includes('/club/') && (
+                    <Link 
+                      href={`${currentPath.split('/').slice(0, 3).join('/')}/events`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 16px',
+                        color: '#052333',
+                        textDecoration: 'none',
+                        fontSize: '14px',
+                        borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                      onClick={() => setShowDropdown(false)}
+                    >
+                      <span style={{ fontSize: '18px' }}>📅</span>
+                      <span>Events</span>
+                    </Link>
+                  )}
                   
                   <Link 
                     href="/documents" 
@@ -401,29 +499,31 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                     <span>Finance</span>
                   </Link>
                   
-                  <Link 
-                    href="/rankings" 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#052333',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={() => setShowDropdown(false)}
-                  >
-                    <span style={{ fontSize: '18px' }}>📊</span>
-                    <span>Ranking</span>
-                  </Link>
+                  {currentPath && currentPath.includes('/club/') && (
+                    <Link 
+                      href={`${currentPath.split('/').slice(0, 3).join('/')}/rankings`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 16px',
+                        color: '#052333',
+                        textDecoration: 'none',
+                        fontSize: '14px',
+                        borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                      onClick={() => setShowDropdown(false)}
+                    >
+                      <span style={{ fontSize: '18px' }}>📊</span>
+                      <span>Ranking</span>
+                    </Link>
+                  )}
                   
                   <div 
                     style={{

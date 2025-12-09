@@ -24,6 +24,7 @@ interface ClubPageClientProps {
   backgroundColor: string;
   fontColor: string;
   selectedColor: string;
+  actionColor: string;
   hoverColor: string;
   openingTime: string;
   closingTime: string;
@@ -31,7 +32,7 @@ interface ClubPageClientProps {
   sessionDuration: number[];
 }
 
-export default function ClubPageClient({ club, slug, logo, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration }: ClubPageClientProps) {
+export default function ClubPageClient({ club, slug, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration }: ClubPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
@@ -84,6 +85,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
   
   console.log('ClubPageClient received props:', { 
     hoverColor, 
+    actionColor,
     bookingSlotInterval, 
     openingTime, 
     closingTime,
@@ -308,6 +310,16 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
     return booking.playerNames || 'Booked';
   };
 
+  // Helper function to check if all courts are booked for a specific time
+  const areAllCourtsBooked = (time: string) => {
+    if (displayCourts.length === 0) return false;
+    
+    // Check if every court has a booking at this time
+    return displayCourts.every(court => {
+      return getBookingForCourtAndTime(court.id, time) !== undefined;
+    });
+  };
+
   // Generate time slots based on club settings
   const generateTimeSlots = useCallback(() => {
     const slots: string[] = [];
@@ -442,7 +454,14 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
       } as React.CSSProperties}
     >
       <ClubHeader logo={logo} fontColor={fontColor} backgroundColor={backgroundColor} selectedColor={selectedColor} currentPath={`/club/${slug}`} />
-      <div className={styles.container} style={{ flex: 1 }}>
+      <div 
+        className={styles.container} 
+        style={{ 
+          flex: 1,
+          '--hover-color': hoverColor,
+          '--selected-color': selectedColor,
+        } as React.CSSProperties & { '--hover-color': string; '--selected-color': string }}
+      >
 
         {/* Date Selection */}
         <div className={styles.dateSelection}>
@@ -476,16 +495,22 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                 style={{
                   backgroundColor: selectedDate === date.dateString ? selectedColor : undefined,
                   borderColor: selectedDate === date.dateString ? selectedColor : undefined,
-                  color: selectedDate === date.dateString ? '#ffffff' : undefined
+                  color: selectedDate === date.dateString ? '#ffffff' : undefined,
+                  borderRadius: '3px',
+                  overflow: 'visible'
                 }}
                 onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.borderRadius = '3px';
                   if (selectedDate !== date.dateString) {
-                    e.currentTarget.style.backgroundColor = hoverColor;
+                    e.currentTarget.style.setProperty('background-color', hoverColor, 'important');
                     e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
                     e.currentTarget.style.color = '#ffffff';
                   }
                 }}
                 onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.borderRadius = '3px';
                   if (selectedDate !== date.dateString) {
                     e.currentTarget.style.backgroundColor = '#ffffff';
                     e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
@@ -539,16 +564,23 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                   style={{
                     backgroundColor: selectedTime === time ? selectedColor : undefined,
                     borderColor: selectedTime === time ? selectedColor : undefined,
-                    color: selectedTime === time ? '#ffffff' : undefined
+                    color: selectedTime === time ? '#ffffff' : undefined,
+                    opacity: areAllCourtsBooked(time) ? 0.5 : 1
                   }}
                   onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    const allBooked = areAllCourtsBooked(time);
+                    e.currentTarget.style.opacity = allBooked ? '0.5' : '1';
                     if (selectedTime !== time) {
-                      e.currentTarget.style.backgroundColor = hoverColor;
+                      e.currentTarget.style.setProperty('background-color', hoverColor, 'important');
                       e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
                       e.currentTarget.style.color = '#ffffff';
                     }
                   }}
                   onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    const allBooked = areAllCourtsBooked(time);
+                    e.currentTarget.style.opacity = allBooked ? '0.5' : '1';
                     if (selectedTime !== time) {
                       e.currentTarget.style.backgroundColor = '#ffffff';
                       e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
@@ -604,13 +636,30 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                   
                   {/* Show booking status when court is booked */}
                   {isBooked && selectedTime && booking && (
-                    <div style={{
-                      marginTop: '16px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '12px'
-                    }}>
+                    <div 
+                      onClick={() => {
+                        if (booking.id) {
+                          router.push(`/club/${slug}/booking/${booking.id}`);
+                        }
+                      }}
+                      style={{
+                        marginTop: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '12px',
+                        cursor: 'pointer',
+                        padding: '8px',
+                        borderRadius: '6px',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
                       {(() => {
                         // Get players array, fallback to empty array if not available
                         const players = (booking.players && Array.isArray(booking.players)) 
@@ -739,10 +788,10 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                               }}
                               className={`${styles.durationButton} ${selectedCourt === court.id && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
                               style={{
-                                backgroundColor: selectedCourt === court.id && selectedDuration === duration ? selectedColor : '#ffffff',
-                                color: selectedCourt === court.id && selectedDuration === duration ? '#ffffff' : '#052333',
-                                border: `2px solid ${selectedCourt === court.id && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.2)'}`,
-                                borderRadius: '6px',
+                                backgroundColor: actionColor,
+                                color: '#ffffff',
+                                border: `2px solid ${actionColor}`,
+                                borderRadius: '3px',
                                 padding: '8px 16px',
                                 fontSize: '14px',
                                 fontWeight: '500',
@@ -750,14 +799,10 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                                 transition: 'all 0.2s'
                               }}
                               onMouseEnter={(e) => {
-                                if (!(selectedCourt === court.id && selectedDuration === duration)) {
-                                  e.currentTarget.style.backgroundColor = hoverColor;
-                                }
+                                e.currentTarget.style.transform = 'scale(1.05)';
                               }}
                               onMouseLeave={(e) => {
-                                if (!(selectedCourt === court.id && selectedDuration === duration)) {
-                                  e.currentTarget.style.backgroundColor = '#ffffff';
-                                }
+                                e.currentTarget.style.transform = 'scale(1)';
                               }}
                             >
                               {duration} min
@@ -840,25 +885,26 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                                 }}
                                 className={`${styles.durationButton} ${selectedCourt === court.id && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
                                 style={{
-                                  backgroundColor: selectedCourt === court.id && selectedDuration === duration ? selectedColor : '#ffffff',
-                                  color: selectedCourt === court.id && selectedDuration === duration ? '#ffffff' : '#052333',
-                                  border: `2px solid ${selectedCourt === court.id && selectedDuration === duration ? selectedColor : 'rgba(5, 35, 51, 0.2)'}`,
+                                  backgroundColor: selectedColor,
+                                  color: '#ffffff',
+                                  border: `2px solid ${selectedColor}`,
                                   borderRadius: '6px',
                                   padding: '8px 16px',
                                   fontSize: '14px',
                                   fontWeight: '500',
                                   cursor: 'pointer',
-                                  transition: 'all 0.2s'
+                                  transition: 'all 0.2s',
+                                  opacity: selectedCourt === court.id && selectedDuration === duration ? 1 : 0.7
                                 }}
                                 onMouseEnter={(e) => {
-                                  if (!(selectedCourt === court.id && selectedDuration === duration)) {
-                                    e.currentTarget.style.backgroundColor = hoverColor;
-                                  }
+                                  e.currentTarget.style.opacity = '1';
+                                  e.currentTarget.style.transform = 'scale(1.05)';
                                 }}
                                 onMouseLeave={(e) => {
                                   if (!(selectedCourt === court.id && selectedDuration === duration)) {
-                                    e.currentTarget.style.backgroundColor = '#ffffff';
+                                    e.currentTarget.style.opacity = '0.7';
                                   }
+                                  e.currentTarget.style.transform = 'scale(1)';
                                 }}
                               >
                                 {duration} min

@@ -1379,23 +1379,6 @@ export default function EditClubPage({ params }: EditClubProps) {
                     )}
                   </div>
                   
-                  {/* Logo URL Input */}
-                  <div style={{ marginTop: '12px' }}>
-                    <label htmlFor="logoUrl" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
-                      Or paste logo URL:
-                    </label>
-                    <input
-                      id="logoUrl"
-                      type="url"
-                      value={logo}
-                      onChange={(e) => setLogo(e.target.value)}
-                      placeholder="https://example.com/logo.png"
-                      disabled={isSubmitting}
-                      className={styles.formInput}
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                  
                   {logo && (
                     <div style={{ marginTop: '12px' }}>
                       <div style={{ position: 'relative', display: 'inline-block' }}>

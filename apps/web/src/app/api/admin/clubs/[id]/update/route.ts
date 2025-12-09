@@ -29,18 +29,11 @@ export async function PUT(
       updatedAt: new Date().toISOString(),
     };
 
-    // Add status if provided, otherwise use is_active for backwards compatibility
-    if (body.status) {
-      updateData.status = body.status;
-      // Update is_active based on status for backwards compatibility
-      updateData.is_active = body.status !== 'DISABLED';
-    } else if (body.is_active !== undefined) {
+    // Add is_active if provided
+    if (body.is_active !== undefined) {
       updateData.is_active = body.is_active;
-      // Set status based on is_active if status not provided
-      updateData.status = body.is_active ? 'ACTIVE_FREE' : 'DISABLED';
     } else {
       updateData.is_active = true;
-      updateData.status = 'ACTIVE_FREE';
     }
 
     // Add branding fields if provided (only if they exist in the request)
@@ -65,6 +58,7 @@ export async function PUT(
     }
     if (body.hoverColor !== undefined) {
       updateData.hoverColor = body.hoverColor && body.hoverColor.trim() ? body.hoverColor.trim() : null;
+      console.log('API: Setting hoverColor to:', updateData.hoverColor);
     }
     if (body.openingTime !== undefined) {
       updateData.openingTime = body.openingTime && body.openingTime.trim() ? body.openingTime.trim() : null;

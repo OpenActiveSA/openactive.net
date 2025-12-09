@@ -29,6 +29,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
   let backgroundColor = '#052333';
   let fontColor = '#ffffff';
   let selectedColor = '#667eea';
+  let actionColor = '#667eea'; // Separate action color for duration buttons
   let hoverColor = '#f0f0f0';
 
   try {
@@ -41,7 +42,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     // Get all active clubs and find by slug
     const result = await supabase
       .from('Clubs')
-      .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
+      .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
       .eq('is_active', true);
     
     clubData = result.data;
@@ -51,7 +52,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     if (error && (error.code === '42703' || error.message?.includes('column'))) {
       const fallbackResult = await supabase
         .from('Clubs')
-        .select('id, name, logo, backgroundColor, fontColor, selectedColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
+        .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
         .eq('is_active', true);
       
       clubData = fallbackResult.data;
@@ -74,6 +75,12 @@ export default async function ClubPage({ params }: ClubPageProps) {
         if (clubFontColor && typeof clubFontColor === 'string' && clubFontColor.trim() !== '') {
           fontColor = clubFontColor.trim();
         }
+        // Get actionColor separately (for duration buttons)
+        const clubActionColor = (foundClub as any).actionColor;
+        if (clubActionColor && typeof clubActionColor === 'string' && clubActionColor.trim() !== '') {
+          actionColor = clubActionColor.trim();
+        }
+        // Get selectedColor (for date/time buttons and other selections)
         const clubSelectedColor = (foundClub as any).selectedColor;
         if (clubSelectedColor && typeof clubSelectedColor === 'string' && clubSelectedColor.trim() !== '') {
           selectedColor = clubSelectedColor.trim();
@@ -145,6 +152,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     backgroundColor={backgroundColor} 
     fontColor={fontColor} 
     selectedColor={selectedColor}
+    actionColor={actionColor}
     hoverColor={hoverColor}
     openingTime={openingTime}
     closingTime={closingTime}
