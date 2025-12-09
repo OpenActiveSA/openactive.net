@@ -633,46 +633,26 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                   className={styles.courtCard}
                   style={{
                     backgroundColor: isBooked ? selectedColor : '#ffffff',
-                    border: isBooked ? `2px solid ${selectedColor}` : 'none',
-                    borderRadius: '3px',
-                    padding: '16px',
-                    position: 'relative'
+                    border: isBooked ? `2px solid ${selectedColor}` : 'none'
                   }}
                 >
-                  <div style={{ 
-                    fontSize: '16px', 
-                    fontWeight: '600', 
-                    color: isBooked ? '#ffffff' : '#052333',
-                    marginBottom: '8px',
-                    textAlign: 'center'
-                  }}>
+                  <div 
+                    className={styles.courtCardName}
+                    style={{ 
+                      color: isBooked ? '#ffffff' : '#052333'
+                    }}
+                  >
                     {court.name}
                   </div>
                   
                   {/* Show booking status when court is booked */}
                   {isBooked && selectedTime && booking && (
                     <div 
+                      className={styles.courtCardBookingContainer}
                       onClick={() => {
                         if (booking.id) {
                           router.push(`/club/${slug}/booking/${booking.id}`);
                         }
-                      }}
-                      style={{
-                        marginTop: '16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '12px',
-                        cursor: 'pointer',
-                        padding: '8px',
-                        borderRadius: '6px',
-                        transition: 'background-color 0.2s'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
                       }}
                     >
                       {(() => {
@@ -685,15 +665,13 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                         // If no players array, show fallback text
                         if (players.length === 0) {
                           return (
-                            <div style={{
-                              padding: '8px 12px',
-                              backgroundColor: selectedColor,
-                              color: '#ffffff',
-                              borderRadius: '4px',
-                              fontSize: '14px',
-                              fontWeight: '500',
-                              textAlign: 'center'
-                            }}>
+                            <div 
+                              className={styles.courtCardBookedText}
+                              style={{
+                                backgroundColor: selectedColor,
+                                color: '#ffffff'
+                              }}
+                            >
                               {booking.playerNames || 'Booked'}
                             </div>
                           );
@@ -701,39 +679,26 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                         
                         // Arrange players: singles = 2 columns, doubles = 2x2 grid
                         return (
-                          <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: isSingles ? 'repeat(2, 1fr)' : 'repeat(2, 1fr)',
-                            gap: '16px',
-                            width: '100%',
-                            maxWidth: isSingles ? '200px' : '100%'
-                          }}>
+                          <div 
+                            className={styles.courtCardPlayersGrid}
+                            style={{
+                              maxWidth: isSingles ? '200px' : '100%'
+                            }}
+                          >
                             {players.map((player: { id?: string; name: string; isGuest: boolean; isPrimary: boolean }, index: number) => (
                               <div
                                 key={index}
-                                style={{
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  alignItems: 'center',
-                                  gap: '6px'
-                                }}
+                                className={styles.courtCardPlayerItem}
                               >
                                 {/* Player Avatar Circle */}
-                                <div style={{
-                                  position: 'relative',
-                                  width: '48px',
-                                  height: '48px',
-                                  borderRadius: '50%',
-                                  backgroundColor: isBooked ? 'rgba(255, 255, 255, 0.2)' : '#052333',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  color: '#ffffff',
-                                  fontSize: '18px',
-                                  fontWeight: '600',
-                                  border: player.isPrimary ? '2px solid #fbbf24' : 'none',
-                                  boxShadow: player.isPrimary ? '0 0 0 2px rgba(251, 191, 36, 0.3)' : 'none'
-                                }}>
+                                <div 
+                                  className={styles.courtCardPlayerAvatar}
+                                  style={{
+                                    backgroundColor: isBooked ? 'rgba(255, 255, 255, 0.2)' : '#052333',
+                                    border: player.isPrimary ? '2px solid #fbbf24' : 'none',
+                                    boxShadow: player.isPrimary ? '0 0 0 2px rgba(251, 191, 36, 0.3)' : 'none'
+                                  }}
+                                >
                                   {player.name.charAt(0).toUpperCase()}
                                   {/* Gold tag for primary player */}
                                   {player.isPrimary && (
@@ -758,16 +723,12 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                                   )}
                                 </div>
                                 {/* Player Name */}
-                                <div style={{
-                                  fontSize: '12px',
-                                  color: isBooked ? '#ffffff' : '#052333',
-                                  textAlign: 'center',
-                                  maxWidth: '80px',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  fontWeight: '500'
-                                }}>
+                                <div 
+                                  className={styles.courtCardPlayerName}
+                                  style={{
+                                    color: isBooked ? '#ffffff' : '#052333'
+                                  }}
+                                >
                                   {player.name}
                                 </div>
                               </div>
@@ -781,7 +742,7 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                   {/* Duration Selection - Show buttons if logged in and court is not booked, show tennis court icon if not logged in */}
                   {!authLoading && user ? (
                     !isBooked && validSessionDuration && validSessionDuration.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                      <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
                           {validSessionDuration.map((duration) => (
                             <button
@@ -874,26 +835,22 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
                     className={styles.courtCard}
                     style={{
                       backgroundColor: '#ffffff',
-                      border: 'none',
-                      borderRadius: '3px',
-                      padding: '16px',
-                      position: 'relative'
+                      border: 'none'
                     }}
                   >
-                    <div style={{ 
-                      fontSize: '16px', 
-                      fontWeight: '600', 
-                      color: '#052333',
-                      marginBottom: '8px',
-                      textAlign: 'center'
-                    }}>
+                    <div 
+                      className={styles.courtCardName}
+                      style={{ 
+                        color: '#052333'
+                      }}
+                    >
                       {court.name}
                     </div>
                     
                     {/* Duration Selection - Show buttons if logged in, show tennis court icon if not logged in */}
                     {!authLoading && user ? (
                       validSessionDuration && validSessionDuration.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                        <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
                             {validSessionDuration.map((duration) => (
                               <button

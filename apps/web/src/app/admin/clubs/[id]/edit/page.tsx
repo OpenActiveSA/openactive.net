@@ -374,23 +374,25 @@ export default function EditClubPage({ params }: EditClubProps) {
     }
   };
 
-  const handleDeleteCourt = async (courtId: string) => {
-    if (!confirm('Are you sure you want to delete this court? This action cannot be undone.')) {
+  const handleToggleCourtStatus = async (courtId: string, currentStatus: boolean) => {
+    const action = currentStatus ? 'disable' : 'enable';
+    if (!confirm(`Are you sure you want to ${action} this court?`)) {
       return;
     }
 
     try {
       const supabase = getSupabaseClientClient();
-      const result = await deleteCourt(supabase, courtId, true);
+      const result = await updateCourt(supabase, courtId, { isActive: !currentStatus });
       if (result.success && club) {
         await loadCourts(club.id);
-        setSuccess('Court deleted successfully');
+        setSuccess(`Court ${currentStatus ? 'disabled' : 'enabled'} successfully`);
+        setTimeout(() => setSuccess(''), 3000);
       } else {
-        setError(result.error || 'Failed to delete court');
+        setError(result.error || `Failed to ${action} court`);
       }
     } catch (err: any) {
-      console.error('Error deleting court:', err);
-      setError(err.message || 'Failed to delete court');
+      console.error(`Error ${action}ing court:`, err);
+      setError(err.message || `Failed to ${action} court`);
     }
   };
 
@@ -1097,18 +1099,24 @@ export default function EditClubPage({ params }: EditClubProps) {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteCourt(court.id)}
+                                    onClick={() => handleToggleCourtStatus(court.id, court.isActive)}
                                     style={{
                                       padding: '6px 12px',
-                                      backgroundColor: 'rgba(255, 0, 0, 0.2)',
-                                      color: '#ff6b6b',
-                                      border: '1px solid rgba(255, 0, 0, 0.3)',
+                                      backgroundColor: court.isActive 
+                                        ? 'rgba(255, 0, 0, 0.2)' 
+                                        : 'rgba(16, 185, 129, 0.2)',
+                                      color: court.isActive 
+                                        ? '#ff6b6b' 
+                                        : '#10b981',
+                                      border: `1px solid ${court.isActive 
+                                        ? 'rgba(255, 0, 0, 0.3)' 
+                                        : 'rgba(16, 185, 129, 0.3)'}`,
                                       borderRadius: '4px',
                                       cursor: 'pointer',
                                       fontSize: '13px'
                                     }}
                                   >
-                                    Delete
+                                    {court.isActive ? 'Disable' : 'Enable'}
                                   </button>
                                 </div>
                               </div>

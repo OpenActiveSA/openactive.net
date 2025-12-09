@@ -190,22 +190,24 @@ export default function ClubManagePage({ params }: ClubManageProps) {
     }
   };
 
-  const handleDeleteCourt = async (courtId: string) => {
-    if (!confirm('Are you sure you want to delete this court? This action cannot be undone.')) {
+  const handleToggleCourtStatus = async (courtId: string, currentStatus: boolean) => {
+    const action = currentStatus ? 'disable' : 'enable';
+    if (!confirm(`Are you sure you want to ${action} this court?`)) {
       return;
     }
 
     try {
       const supabase = getSupabaseClientClient();
-      const result = await deleteCourt(supabase, courtId, true);
+      const result = await updateCourt(supabase, courtId, { isActive: !currentStatus });
       if (result.success && club) {
         await loadCourts(club.id);
+        setError(''); // Clear any previous errors
       } else {
-        setError(result.error || 'Failed to delete court');
+        setError(result.error || `Failed to ${action} court`);
       }
     } catch (err: any) {
-      console.error('Error deleting court:', err);
-      setError(err.message || 'Failed to delete court');
+      console.error(`Error ${action}ing court:`, err);
+      setError(err.message || `Failed to ${action} court`);
     }
   };
 
