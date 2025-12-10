@@ -1086,3 +1086,311 @@
   font-weight: 500;
 }
 
+/* Player Selection Page Styles */
+.playersPageContainer {
+  padding: 40px 20px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.playersPageTitle {
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.bookingSummaryCard {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 30px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.bookingSummaryItem {
+  text-align: center;
+  flex: 1;
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.bookingSummaryItem:last-child {
+  border-right: none;
+}
+
+.bookingSummaryLabel {
+  font-size: 14px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.bookingSummaryValue {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.gameTypeContainer {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 30px;
+  justify-content: center;
+}
+
+.gameTypeButton {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  border: 2px solid;
+}
+
+.playerSelectionContainer {
+  margin-bottom: 30px;
+}
+
+.playerFieldWrapper {
+  margin-bottom: 16px;
+}
+
+.playerFieldDivider {
+  height: 1px;
+  width: 60%;
+  background-color: rgba(5, 35, 51, 0.2);
+  margin: 16px auto;
+}
+
+.playerField {
+  background-color: #ffffff;
+  border-radius: 3px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.playerAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+  flex-shrink: 0;
+  background-color: rgba(5, 35, 51, 0.1);
+  color: #052333;
+}
+
+.playerAvatarSelected {
+  background-color: var(--selected-color, #667eea);
+  color: #ffffff;
+}
+
+.playerFieldContent {
+  flex: 1;
+  position: relative;
+}
+
+.playerName {
+  color: #052333;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.playerInput {
+  width: 100%;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  color: #052333;
+  background-color: transparent;
+}
+
+.playerDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background-color: #ffffff;
+  border-radius: 6px;
+  margin-top: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.playerDropdownItem {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(5, 35, 51, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.playerDropdownItem:hover {
+  background-color: rgba(5, 35, 51, 0.05);
+}
+
+.playerDropdownAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  background-color: var(--selected-color, #667eea);
+}
+
+.playerDropdownInfo {
+  flex: 1;
+}
+
+.playerDropdownName {
+  color: #052333;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.playerDropdownEmail {
+  color: #666;
+  font-size: 12px;
+}
+
+.guestOption {
+  padding: 12px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid rgba(5, 35, 51, 0.1);
+}
+
+.guestOption:hover {
+  background-color: rgba(5, 35, 51, 0.05);
+}
+
+.guestAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background-color: #052333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.guestLabel {
+  color: #052333;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.removePlayerButton {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 4px;
+}
+
+.coachListContainer {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.coachListItem {
+  padding: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(5, 35, 51, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background-color 0.2s;
+}
+
+.coachListItem:hover {
+  background-color: rgba(5, 35, 51, 0.05);
+}
+
+.coachListAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 16px;
+  flex-shrink: 0;
+  background-color: var(--selected-color, #667eea);
+}
+
+.coachListInfo {
+  flex: 1;
+}
+
+.coachListName {
+  color: #052333;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.coachListEmail {
+  color: #666;
+  font-size: 12px;
+}
+
+.navigationButtons {
+  display: flex;
+  gap: 12px;
+  margin-top: 40px;
+}
+
+.navButton {
+  flex: 1;
+  padding: 14px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.navButtonBack {
+  background-color: #ffffff;
+  color: #052333;
+}
+
+.navButtonBack:hover {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.navButtonNext {
+  color: #ffffff;
+  background-color: var(--selected-color, #667eea);
+}
+
+.navButtonNext:hover {
+  opacity: 0.9;
+}
+

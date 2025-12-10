@@ -43,3 +43,4 @@ export async function getClubSettings(slug: string): Promise<ClubSettings | null
   return null;
 }
 
+

@@ -53,3 +53,4 @@ apps/web/src/
 5. Update all pages to use new structure
 6. Create index files for clean imports
 
+

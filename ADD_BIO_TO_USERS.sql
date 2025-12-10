@@ -21,3 +21,4 @@ WHERE table_schema = 'public'
   AND table_name IN ('Users', 'User')
   AND column_name = 'bio';
 
+

@@ -640,7 +640,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                   className={styles.courtCard}
                   style={{
                     backgroundColor: isBooked ? selectedColor : '#ffffff',
-                    border: isBooked ? `2px solid ${selectedColor}` : 'none'
+                    border: 'none'
                   }}
                 >
                   <div 
