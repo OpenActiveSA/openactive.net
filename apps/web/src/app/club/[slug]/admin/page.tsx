@@ -1,11 +1,13 @@
 'use client';
 
-import { use, useState, useEffect, useRef, useCallback } from 'react';
+import { use, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
+import type { ClubRole } from '@/lib/club-roles';
+import { setUserClubRole } from '@/lib/club-roles';
 import styles from '@/components/AdminDashboard.module.css';
 import adminStyles from '@/styles/admin.module.css';
 
@@ -93,6 +95,35 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
   const hasLoadedRef = useRef(false);
   const mountedRef = useRef(true);
+  const [players, setPlayers] = useState<Array<{
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl?: string;
+    role: ClubRole;
+    lastLoginAt?: string;
+  }>>([]);
+  const [isLoadingPlayers, setIsLoadingPlayers] = useState(false);
+  const [playerSearchTerm, setPlayerSearchTerm] = useState('');
+  const [addPlayerSearchTerm, setAddPlayerSearchTerm] = useState('');
+  const [addPlayerSearchResults, setAddPlayerSearchResults] = useState<Array<{
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl?: string;
+  }>>([]);
+  const [isSearchingPlayers, setIsSearchingPlayers] = useState(false);
+  const [selectedPlayerToAdd, setSelectedPlayerToAdd] = useState<{
+    id: string;
+    name: string;
+    email: string;
+  } | null>(null);
+  const [selectedRoleToAdd, setSelectedRoleToAdd] = useState<ClubRole>('MEMBER');
+  const [isAddingPlayer, setIsAddingPlayer] = useState(false);
+  const [addPlayerError, setAddPlayerError] = useState('');
+  const [addPlayerSuccess, setAddPlayerSuccess] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [impersonatingPlayerId, setImpersonatingPlayerId] = useState<string | null>(null);
   
   // Stable user ID for dependency array
   const userId = user?.id || null;
@@ -283,6 +314,34 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
       return;
     }
 
+    // Check if user is SUPER_ADMIN
+    const checkSuperAdmin = async () => {
+      try {
+        const supabase = getSupabaseClientClient();
+        const { data, error } = await supabase
+          .from('Users')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error checking super admin status:', error);
+          return;
+        }
+
+        if (data && data.role === 'SUPER_ADMIN') {
+          console.log('User is SUPER_ADMIN, showing impersonate button');
+          setIsSuperAdmin(true);
+        } else {
+          console.log('User is not SUPER_ADMIN, role:', data?.role);
+          setIsSuperAdmin(false);
+        }
+      } catch (err) {
+        console.error('Error checking super admin status:', err);
+      }
+    };
+
+    checkSuperAdmin();
     loadClubData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id, session?.user?.id]);
@@ -396,6 +455,381 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
       loadBookings();
     }
   }, [activeTab, club?.id, loadBookings]);
+
+  // Load players when club-players tab is active
+  useEffect(() => {
+    const loadPlayers = async () => {
+      if (!club?.id || activeTab !== 'club-players') {
+        return;
+      }
+
+      setIsLoadingPlayers(true);
+      try {
+        const supabase = getSupabaseClientClient();
+        
+        // Fetch users with roles linked to this club
+        const { data: roles, error: rolesError } = await supabase
+          .from('UserClubRoles')
+          .select('userId, role, Users!inner(id, email, Firstname, Surname, avatarUrl, lastLoginAt)')
+          .eq('clubId', club.id);
+
+        if (rolesError) {
+          console.error('Error fetching player roles:', rolesError);
+          setPlayers([]);
+          setIsLoadingPlayers(false);
+          return;
+        }
+
+        // Create role map
+        const roleMap = new Map<string, ClubRole>();
+        const playersList: Array<{
+          id: string;
+          name: string;
+          email: string;
+          avatarUrl?: string;
+          role: ClubRole;
+          lastLoginAt?: string;
+        }> = [];
+
+        if (roles) {
+          roles.forEach((r: any) => {
+            const userId = typeof r.userId === 'object' ? r.userId.id : r.userId;
+            const userData = typeof r.Users === 'object' ? r.Users : null;
+            
+            if (userData) {
+              const name = userData.Firstname && userData.Surname
+                ? `${userData.Firstname} ${userData.Surname}`
+                : userData.Firstname || userData.Surname || userData.email?.split('@')[0] || 'Unknown';
+              
+              roleMap.set(userId, r.role);
+              playersList.push({
+                id: userId,
+                name,
+                email: userData.email || '',
+                avatarUrl: userData.avatarUrl || undefined,
+                role: r.role,
+                lastLoginAt: userData.lastLoginAt || undefined
+              });
+            }
+          });
+        }
+
+        // Sort by name
+        playersList.sort((a, b) => a.name.localeCompare(b.name));
+        setPlayers(playersList);
+      } catch (err) {
+        console.error('Error loading players:', err);
+        setPlayers([]);
+      } finally {
+        setIsLoadingPlayers(false);
+      }
+    };
+
+    loadPlayers();
+  }, [activeTab, club?.id]);
+
+  // Search for users to add
+  useEffect(() => {
+    const searchUsers = async () => {
+      if (!addPlayerSearchTerm.trim() || addPlayerSearchTerm.length < 2) {
+        setAddPlayerSearchResults([]);
+        return;
+      }
+
+      setIsSearchingPlayers(true);
+      try {
+        const supabase = getSupabaseClientClient();
+        const term = addPlayerSearchTerm.toLowerCase();
+        
+        // Search users by name or email
+        const { data, error } = await supabase
+          .from('Users')
+          .select('id, email, Firstname, Surname, avatarUrl')
+          .or(`Firstname.ilike.%${term}%,Surname.ilike.%${term}%,email.ilike.%${term}%`)
+          .limit(10);
+
+        if (error) {
+          console.error('Error searching users:', error);
+          setAddPlayerSearchResults([]);
+          return;
+        }
+
+        if (data) {
+          const results = data.map((u: any) => ({
+            id: u.id,
+            name: u.Firstname && u.Surname
+              ? `${u.Firstname} ${u.Surname}`
+              : u.Firstname || u.Surname || u.email?.split('@')[0] || 'Unknown',
+            email: u.email || '',
+            avatarUrl: u.avatarUrl || undefined
+          }));
+          
+          // Filter out players already in the club
+          const existingPlayerIds = new Set(players.map(p => p.id));
+          const filteredResults = results.filter(r => !existingPlayerIds.has(r.id));
+          
+          setAddPlayerSearchResults(filteredResults);
+        }
+      } catch (err) {
+        console.error('Error searching users:', err);
+        setAddPlayerSearchResults([]);
+      } finally {
+        setIsSearchingPlayers(false);
+      }
+    };
+
+    const timeoutId = setTimeout(searchUsers, 300);
+    return () => clearTimeout(timeoutId);
+  }, [addPlayerSearchTerm, players]);
+
+  // Handle impersonating a player
+  const handleImpersonatePlayer = async (playerId: string) => {
+    if (!user?.id || !isSuperAdmin) {
+      alert('Only super admins can impersonate players');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to log in as this player? You will be signed out of your current session.')) {
+      return;
+    }
+
+    setImpersonatingPlayerId(playerId);
+
+    try {
+      const response = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          targetUserId: playerId,
+          adminUserId: user.id,
+          clubSlug: slug
+        }),
+      });
+
+      // Get response text (this consumes the body, so we need to do it once)
+      let responseText = '';
+      try {
+        responseText = await response.text();
+      } catch (textError) {
+        console.error('Error reading response text:', textError);
+        responseText = '(could not read response)';
+      }
+      
+      // Log response details
+      console.log('=== IMPERSONATE RESPONSE ===');
+      console.log('Status:', response.status);
+      console.log('Status Text:', response.statusText);
+      console.log('OK:', response.ok);
+      console.log('Response Text:', responseText);
+      console.log('Response Text Length:', responseText?.length || 0);
+      console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
+      console.log('===========================');
+      
+      // Check if response is ok
+      if (!response.ok) {
+        // Try to parse as JSON for error details
+        let errorData: any = null;
+        let errorMessage = `Server error (${response.status} ${response.statusText})`;
+        
+        try {
+          if (responseText && responseText.trim() && responseText.trim() !== '(could not read response)') {
+            errorData = JSON.parse(responseText);
+            console.log('Parsed error data:', JSON.stringify(errorData, null, 2));
+            errorMessage = errorData?.error || errorData?.details || errorData?.message || errorData?.linkError || errorMessage;
+          } else {
+            console.warn('Response text is empty or could not be read');
+            errorData = { raw: responseText || '(empty response)' };
+          }
+        } catch (parseError: any) {
+          console.error('Could not parse error response as JSON:', parseError);
+          console.error('Parse error details:', parseError?.message, parseError?.stack);
+          errorData = { raw: responseText || '(empty)', parseError: parseError?.message };
+        }
+        
+        // Log error details separately with full details
+        console.error('========== ERROR DETAILS ==========');
+        console.error('ERROR STATUS:', response.status);
+        console.error('ERROR STATUS TEXT:', response.statusText);
+        console.error('ERROR DATA (full):', JSON.stringify(errorData, null, 2));
+        console.error('ERROR DATA DETAILS:', errorData?.details);
+        console.error('ERROR DATA ERROR:', errorData?.error);
+        console.error('ERROR DATA LINK ERROR:', errorData?.linkError);
+        console.error('ERROR DATA LINK ERROR CODE:', errorData?.linkErrorCode);
+        console.error('ERROR MESSAGE:', errorMessage);
+        console.error('RAW RESPONSE:', responseText);
+        console.error('===================================');
+        
+        // Show more detailed error message
+        const detailedError = errorData?.details || errorData?.error || errorData?.linkError || errorMessage;
+        throw new Error(detailedError);
+      }
+      
+      // Parse successful response
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('SUCCESS - Parsed data:', data);
+      } catch (jsonError) {
+        console.error('Error parsing JSON response:', jsonError);
+        throw new Error(`Failed to parse server response: ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}`);
+      }
+
+      // Store admin session info for later restoration
+      if (session) {
+        localStorage.setItem('admin_session_backup', JSON.stringify({
+          userId: user.id,
+          email: user.email,
+          accessToken: session.access_token,
+          refreshToken: session.refresh_token
+        }));
+      }
+
+      // Use the magic link to sign in as the target user
+      if (data.magicLink) {
+        // Redirect to the magic link which will sign in as the target user
+        window.location.href = data.magicLink;
+      } else {
+        console.error('No magic link in response:', data);
+        throw new Error('No magic link provided in response');
+      }
+    } catch (err: any) {
+      console.error('Error impersonating player:', err);
+      const errorMessage = err.message || err.toString() || 'Failed to impersonate player. Please try again.';
+      alert(`Error: ${errorMessage}\n\nCheck the browser console for more details.`);
+      setImpersonatingPlayerId(null);
+    }
+  };
+
+  // Handle adding a player to the club
+  const handleAddPlayer = async () => {
+    if (!selectedPlayerToAdd || !club?.id) {
+      setAddPlayerError('Please select a player');
+      return;
+    }
+
+    setIsAddingPlayer(true);
+    setAddPlayerError('');
+    setAddPlayerSuccess(false);
+
+    try {
+      const supabase = getSupabaseClientClient();
+      const result = await setUserClubRole(supabase, selectedPlayerToAdd.id, club.id, selectedRoleToAdd);
+
+      if (result.success) {
+        setAddPlayerSuccess(true);
+        setSelectedPlayerToAdd(null);
+        setAddPlayerSearchTerm('');
+        setAddPlayerSearchResults([]);
+        setSelectedRoleToAdd('MEMBER');
+        
+        // Reload players list
+        const reloadPlayers = async () => {
+          const supabase = getSupabaseClientClient();
+          setIsLoadingPlayers(true);
+          try {
+            const { data: roles, error: rolesError } = await supabase
+              .from('UserClubRoles')
+              .select('userId, role, Users!inner(id, email, Firstname, Surname, avatarUrl, lastLoginAt)')
+              .eq('clubId', club.id);
+
+            if (!rolesError && roles) {
+              const playersList: Array<{
+                id: string;
+                name: string;
+                email: string;
+                avatarUrl?: string;
+                role: ClubRole;
+                lastLoginAt?: string;
+              }> = [];
+
+              roles.forEach((r: any) => {
+                const userId = typeof r.userId === 'object' ? r.userId.id : r.userId;
+                const userData = typeof r.Users === 'object' ? r.Users : null;
+                
+                if (userData) {
+                  const name = userData.Firstname && userData.Surname
+                    ? `${userData.Firstname} ${userData.Surname}`
+                    : userData.Firstname || userData.Surname || userData.email?.split('@')[0] || 'Unknown';
+                  
+                  playersList.push({
+                    id: userId,
+                    name,
+                    email: userData.email || '',
+                    avatarUrl: userData.avatarUrl || undefined,
+                    role: r.role,
+                    lastLoginAt: userData.lastLoginAt || undefined
+                  });
+                }
+              });
+
+              playersList.sort((a, b) => a.name.localeCompare(b.name));
+              setPlayers(playersList);
+            }
+          } catch (err) {
+            console.error('Error reloading players:', err);
+          } finally {
+            setIsLoadingPlayers(false);
+          }
+        };
+        
+        reloadPlayers();
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => setAddPlayerSuccess(false), 3000);
+      } else {
+        setAddPlayerError(result.error || 'Failed to add player');
+      }
+    } catch (err: any) {
+      setAddPlayerError(err.message || 'Failed to add player');
+    } finally {
+      setIsAddingPlayer(false);
+    }
+  };
+
+  // Filter players based on search term
+  const filteredPlayers = useMemo(() => {
+    if (!playerSearchTerm.trim()) return players;
+    
+    const term = playerSearchTerm.toLowerCase();
+    return players.filter(player =>
+      player.name.toLowerCase().includes(term) ||
+      player.email.toLowerCase().includes(term)
+    );
+  }, [players, playerSearchTerm]);
+
+  // Get role display label
+  const getRoleLabel = (role: ClubRole): string => {
+    switch (role) {
+      case 'MEMBER':
+        return 'Member';
+      case 'VISITOR':
+        return 'Visitor';
+      case 'COACH':
+        return 'Coach';
+      case 'CLUB_ADMIN':
+        return 'Club Admin';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  // Get role badge color
+  const getRoleBadgeStyle = (role: ClubRole) => {
+    switch (role) {
+      case 'MEMBER':
+        return { backgroundColor: '#3b82f6', color: '#ffffff' };
+      case 'VISITOR':
+        return { backgroundColor: '#9ca3af', color: '#ffffff' };
+      case 'COACH':
+        return { backgroundColor: '#f59e0b', color: '#ffffff' };
+      case 'CLUB_ADMIN':
+        return { backgroundColor: '#ef4444', color: '#ffffff' };
+      default:
+        return { backgroundColor: '#6b7280', color: '#ffffff' };
+    }
+  };
 
   // Show loading state
   if (authLoading || isLoading) {
@@ -1819,7 +2253,485 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                 </div>
               </div>
               <div style={{ padding: '32px' }}>
-                <p>Player management coming soon...</p>
+                {/* Search input */}
+                <div style={{ marginBottom: '24px' }}>
+                  <input
+                    type="text"
+                    placeholder="Search players by name or email..."
+                    value={playerSearchTerm}
+                    onChange={(e) => setPlayerSearchTerm(e.target.value)}
+                    style={{
+                      width: '100%',
+                      maxWidth: '400px',
+                      padding: '12px 16px',
+                      fontSize: '14px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '6px',
+                      outline: 'none',
+                      transition: 'border-color 0.2s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                  />
+                </div>
+
+                {/* Loading state */}
+                {isLoadingPlayers ? (
+                  <div style={{ textAlign: 'center', padding: '48px' }}>
+                    <div className={styles.spinner} style={{ margin: '0 auto' }}></div>
+                    <p style={{ marginTop: '16px', color: '#6b7280' }}>Loading players...</p>
+                  </div>
+                ) : filteredPlayers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px', color: '#6b7280' }}>
+                    {playerSearchTerm ? 'No players found matching your search.' : 'No players linked to this club yet.'}
+                  </div>
+                ) : (
+                  /* Players table */
+                  <div style={{
+                    backgroundColor: '#ffffff',
+                    borderRadius: '8px',
+                    border: '1px solid #e5e7eb',
+                    overflow: 'hidden'
+                  }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Player</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Email</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Role</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Last Login</th>
+                          {isSuperAdmin && (
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredPlayers.map((player, index) => (
+                          <tr
+                            key={player.id}
+                            style={{
+                              borderBottom: index < filteredPlayers.length - 1 ? '1px solid #f3f4f6' : 'none',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            <td style={{ padding: '16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                {player.avatarUrl ? (
+                                  <img
+                                    src={player.avatarUrl}
+                                    alt={player.name}
+                                    style={{
+                                      width: '40px',
+                                      height: '40px',
+                                      borderRadius: '50%',
+                                      objectFit: 'cover'
+                                    }}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      if (e.currentTarget.nextElementSibling) {
+                                        (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
+                                      }
+                                    }}
+                                  />
+                                ) : null}
+                                <div
+                                  style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#3b82f6',
+                                    color: '#ffffff',
+                                    display: player.avatarUrl ? 'none' : 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '16px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  {player.name.charAt(0).toUpperCase()}
+                                </div>
+                                <span style={{ fontSize: '14px', fontWeight: '500', color: '#111827' }}>{player.name}</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px', fontSize: '14px', color: '#6b7280' }}>{player.email}</td>
+                            <td style={{ padding: '16px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '4px 12px',
+                                  borderRadius: '12px',
+                                  fontSize: '12px',
+                                  fontWeight: '500',
+                                  ...getRoleBadgeStyle(player.role)
+                                }}
+                              >
+                                {getRoleLabel(player.role)}
+                              </span>
+                            </td>
+                            <td style={{ padding: '16px', fontSize: '14px', color: '#6b7280' }}>
+                              {player.lastLoginAt
+                                ? new Date(player.lastLoginAt).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                  })
+                                : 'Never'}
+                            </td>
+                            {isSuperAdmin && (
+                              <td style={{ padding: '16px' }}>
+                                <button
+                                  onClick={() => handleImpersonatePlayer(player.id)}
+                                  disabled={impersonatingPlayerId === player.id}
+                                  style={{
+                                    padding: '6px 12px',
+                                    backgroundColor: impersonatingPlayerId === player.id ? '#9ca3af' : '#3b82f6',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    fontSize: '12px',
+                                    fontWeight: '500',
+                                    cursor: impersonatingPlayerId === player.id ? 'not-allowed' : 'pointer',
+                                    transition: 'background-color 0.2s'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (impersonatingPlayerId !== player.id) {
+                                      e.currentTarget.style.backgroundColor = '#2563eb';
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (impersonatingPlayerId !== player.id) {
+                                      e.currentTarget.style.backgroundColor = '#3b82f6';
+                                    }
+                                  }}
+                                >
+                                  {impersonatingPlayerId === player.id ? 'Logging in...' : 'Log in as player'}
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Results count */}
+                {!isLoadingPlayers && filteredPlayers.length > 0 && (
+                  <div style={{ marginTop: '16px', fontSize: '14px', color: '#6b7280' }}>
+                    Showing {filteredPlayers.length} of {players.length} player{players.length !== 1 ? 's' : ''}
+                    {playerSearchTerm && ` matching "${playerSearchTerm}"`}
+                  </div>
+                )}
+
+                {/* Add Player Section */}
+                <div style={{
+                  marginTop: '48px',
+                  paddingTop: '32px',
+                  borderTop: '2px solid #e5e7eb'
+                }}>
+                  <h2 style={{
+                    fontSize: '20px',
+                    fontWeight: '600',
+                    color: '#111827',
+                    marginBottom: '16px'
+                  }}>
+                    Add Player to Club
+                  </h2>
+
+                  {/* Success message */}
+                  {addPlayerSuccess && (
+                    <div style={{
+                      marginBottom: '16px',
+                      padding: '12px 16px',
+                      backgroundColor: '#d1fae5',
+                      border: '1px solid #10b981',
+                      borderRadius: '6px',
+                      color: '#065f46',
+                      fontSize: '14px'
+                    }}>
+                      Player added successfully!
+                    </div>
+                  )}
+
+                  {/* Error message */}
+                  {addPlayerError && (
+                    <div style={{
+                      marginBottom: '16px',
+                      padding: '12px 16px',
+                      backgroundColor: '#fee2e2',
+                      border: '1px solid #ef4444',
+                      borderRadius: '6px',
+                      color: '#991b1b',
+                      fontSize: '14px'
+                    }}>
+                      {addPlayerError}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {/* Search input */}
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: '#374151',
+                        marginBottom: '8px'
+                      }}>
+                        Search for Player
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="text"
+                          placeholder="Search by name or email..."
+                          value={addPlayerSearchTerm}
+                          onChange={(e) => {
+                            setAddPlayerSearchTerm(e.target.value);
+                            setSelectedPlayerToAdd(null);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            fontSize: '14px',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px',
+                            outline: 'none',
+                            transition: 'border-color 0.2s'
+                          }}
+                          onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                          onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                        />
+                        {isSearchingPlayers && (
+                          <div style={{
+                            position: 'absolute',
+                            right: '12px',
+                            top: '50%',
+                            transform: 'translateY(-50%)'
+                          }}>
+                            <div className={styles.spinner} style={{ width: '16px', height: '16px' }}></div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Search results dropdown */}
+                      {addPlayerSearchTerm.length >= 2 && addPlayerSearchResults.length > 0 && !selectedPlayerToAdd && (
+                        <div style={{
+                          marginTop: '8px',
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                          maxHeight: '200px',
+                          overflowY: 'auto'
+                        }}>
+                          {addPlayerSearchResults.map((user) => (
+                            <button
+                              key={user.id}
+                              onClick={() => setSelectedPlayerToAdd(user)}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                textAlign: 'left',
+                                border: 'none',
+                                backgroundColor: 'transparent',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                transition: 'background-color 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                              {user.avatarUrl ? (
+                                <img
+                                  src={user.avatarUrl}
+                                  alt={user.name}
+                                  style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '50%',
+                                    objectFit: 'cover'
+                                  }}
+                                />
+                              ) : (
+                                <div style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '50%',
+                                  backgroundColor: '#3b82f6',
+                                  color: '#ffffff',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '14px',
+                                  fontWeight: '600'
+                                }}>
+                                  {user.name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <div style={{ fontSize: '14px', fontWeight: '500', color: '#111827' }}>
+                                  {user.name}
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                  {user.email}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {addPlayerSearchTerm.length >= 2 && !isSearchingPlayers && addPlayerSearchResults.length === 0 && (
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '12px',
+                          fontSize: '14px',
+                          color: '#6b7280',
+                          textAlign: 'center'
+                        }}>
+                          No users found
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Selected player display */}
+                    {selectedPlayerToAdd && (
+                      <div style={{
+                        padding: '16px',
+                        backgroundColor: '#f9fafb',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          {selectedPlayerToAdd.avatarUrl ? (
+                            <img
+                              src={selectedPlayerToAdd.avatarUrl}
+                              alt={selectedPlayerToAdd.name}
+                              style={{
+                                width: '40px',
+                                height: '40px',
+                                borderRadius: '50%',
+                                objectFit: 'cover'
+                              }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '50%',
+                              backgroundColor: '#3b82f6',
+                              color: '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '16px',
+                              fontWeight: '600'
+                            }}>
+                              {selectedPlayerToAdd.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: '500', color: '#111827' }}>
+                              {selectedPlayerToAdd.name}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                              {selectedPlayerToAdd.email}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedPlayerToAdd(null);
+                            setAddPlayerSearchTerm('');
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: 'transparent',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '4px',
+                            color: '#6b7280',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          Change
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Role selection */}
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: '#374151',
+                        marginBottom: '8px'
+                      }}>
+                        Assign Role
+                      </label>
+                      <select
+                        value={selectedRoleToAdd}
+                        onChange={(e) => setSelectedRoleToAdd(e.target.value as ClubRole)}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          fontSize: '14px',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px',
+                          outline: 'none',
+                          backgroundColor: '#ffffff',
+                          cursor: 'pointer',
+                          transition: 'border-color 0.2s'
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                        onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                      >
+                        <option value="MEMBER">Member</option>
+                        <option value="VISITOR">Visitor</option>
+                        <option value="COACH">Coach</option>
+                        <option value="CLUB_ADMIN">Club Manager</option>
+                      </select>
+                    </div>
+
+                    {/* Add button */}
+                    <button
+                      onClick={handleAddPlayer}
+                      disabled={!selectedPlayerToAdd || isAddingPlayer}
+                      style={{
+                        padding: '12px 24px',
+                        backgroundColor: selectedPlayerToAdd && !isAddingPlayer ? '#3b82f6' : '#9ca3af',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: selectedPlayerToAdd && !isAddingPlayer ? 'pointer' : 'not-allowed',
+                        transition: 'background-color 0.2s',
+                        alignSelf: 'flex-start'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (selectedPlayerToAdd && !isAddingPlayer) {
+                          e.currentTarget.style.backgroundColor = '#2563eb';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedPlayerToAdd && !isAddingPlayer) {
+                          e.currentTarget.style.backgroundColor = '#3b82f6';
+                        }
+                      }}
+                    >
+                      {isAddingPlayer ? 'Adding...' : 'Add Player to Club'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

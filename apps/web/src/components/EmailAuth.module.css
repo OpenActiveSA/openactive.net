@@ -361,3 +361,101 @@
   cursor: not-allowed;
 }
 
+/* Profile Photo Upload Styles */
+.photoLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+}
+
+.photoUploadContainer {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.photoUploadLabel {
+  display: block;
+  width: 100%;
+  cursor: pointer;
+}
+
+.photoInput {
+  display: none;
+}
+
+.photoUploadPlaceholder {
+  width: 100%;
+  min-height: 120px;
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: rgba(255, 255, 255, 0.05);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.photoUploadLabel:hover .photoUploadPlaceholder {
+  border-color: rgba(255, 255, 255, 0.5);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.photoUploadLabel:has(.photoInput:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.photoUploadIcon {
+  font-size: 32px;
+  opacity: 0.7;
+}
+
+.photoUploadText {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.photoPreviewContainer {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.photoPreview {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.removePhotoButton {
+  background-color: rgba(226, 7, 97, 0.9);
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+  font-family: inherit;
+}
+
+.removePhotoButton:hover:not(:disabled) {
+  background-color: rgba(226, 7, 97, 1);
+}
+
+.removePhotoButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

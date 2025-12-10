@@ -18,6 +18,9 @@ export function EmailAuth() {
   const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState<'email' | 'login' | 'register' | 'success'>('email');
+  const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const supabase = getSupabaseClientClient();
 
   useEffect(() => {
@@ -54,7 +57,7 @@ export function EmailAuth() {
       if (error) {
         if (error.code === 'PGRST116') {
           // PGRST116 means no rows returned, which is fine
-          console.log('[EmailAuth] User not found, going to register');
+          console.log('[EmailAuth] User not found in Users table, going to register');
           setStep('register');
           return;
         }
@@ -71,10 +74,32 @@ export function EmailAuth() {
         return;
       }
 
-      // If user exists, go to login step; otherwise go to register step
+      // If user exists in Users table, check if they also exist in auth.users
       if (data) {
-        console.log('[EmailAuth] User found, going to login');
-        setStep('login');
+        console.log('[EmailAuth] User found in Users table, checking auth...');
+        // Try to sign in with a dummy password to check if auth account exists
+        // This will fail but tell us if the user exists in auth
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email: emailToCheck.toLowerCase().trim(),
+          password: 'dummy-check-password-12345'
+        });
+        
+        // If error is "Invalid login credentials", user exists in auth but password is wrong
+        // If error is "Email not confirmed", user exists in auth
+        // If error is "User not found", user doesn't exist in auth
+        if (authError) {
+          if (authError.message?.includes('Invalid login') || authError.message?.includes('Email not confirmed') || authError.message?.includes('not found') === false) {
+            console.log('[EmailAuth] User exists in auth, going to login');
+            setStep('login');
+          } else {
+            console.log('[EmailAuth] User exists in Users but not in auth, going to register (will likely fail)');
+            setStep('register');
+            setError('An account with this email exists but is not properly set up. Please contact support.');
+          }
+        } else {
+          // This shouldn't happen, but if sign in succeeds, go to login
+          setStep('login');
+        }
       } else {
         console.log('[EmailAuth] User not found, going to register');
         setStep('register');
@@ -163,33 +188,194 @@ export function EmailAuth() {
           return;
         }
 
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password: password,
-          options: {
-            data: {
-              Firstname: name.trim(),
-              Surname: surname.trim(),
-            },
-          },
-        });
+        // Before signing up, check if user already exists in Users table
+        // This can cause a trigger conflict if they exist in Users but not in auth.users
+        const { data: existingUserCheck } = await supabase
+          .from('Users')
+          .select('id, email')
+          .eq('email', email.trim().toLowerCase())
+          .maybeSingle();
 
-        if (error) {
-          setError(error.message || 'Registration failed. Please try again.');
+        if (existingUserCheck) {
+          setError('An account with this email already exists in the system. Please try logging in instead. If you cannot log in, the account may need to be linked to an authentication account. Please contact support.');
+          setStep('login');
           return;
         }
 
-        if (data.user) {
-          // Skip email confirmation for now - immediately redirect
-          // Update last login in Users table
+        // Use API route to create user (bypasses database trigger issues)
+        // This is more reliable than using signUp directly when triggers are problematic
+        let signUpData, signUpError;
+        
           try {
-            await supabase
+            console.log('Creating account via API route...');
+            
+            // Use API route to create user with service role (bypasses trigger)
+            let apiResponse;
+            try {
+              apiResponse = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  email: email.trim(),
+                  password: password,
+                  firstName: name.trim(),
+                  surname: surname.trim(),
+                  avatarUrl: null, // Will upload after account creation
+                }),
+              });
+            } catch (fetchError: any) {
+              console.error('Network error calling API route:', fetchError);
+              throw new Error(`Network error: ${fetchError.message || 'Failed to connect to server'}`);
+            }
+
+          if (!apiResponse) {
+            throw new Error('No response from server');
+          }
+
+          // Read response as text first
+          const responseText = await apiResponse.text();
+          console.log('=== API RESPONSE DEBUG ===');
+          console.log('Status:', apiResponse.status);
+          console.log('Status Text:', apiResponse.statusText);
+          console.log('OK:', apiResponse.ok);
+          console.log('Response Text Length:', responseText?.length || 0);
+          console.log('Response Text:', responseText || '(empty)');
+          console.log('==========================');
+          
+          let apiData: any = null;
+          if (responseText) {
+            try {
+              apiData = JSON.parse(responseText);
+              console.log('Parsed API Data:', apiData);
+            } catch (parseError: any) {
+              console.error('Failed to parse API response as JSON:', parseError);
+              console.error('Response text that failed to parse:', responseText);
+              throw new Error(`Server returned invalid JSON (${apiResponse.status}): ${responseText.substring(0, 200)}`);
+            }
+          } else {
+            console.warn('Empty response body from API route');
+            apiData = {};
+          }
+          
+          if (!apiResponse.ok) {
+            const errorInfo = {
+              status: apiResponse.status,
+              statusText: apiResponse.statusText,
+              responseText: responseText || '(empty)',
+              parsedData: apiData,
+              hasData: !!apiData,
+              dataKeys: apiData ? Object.keys(apiData) : [],
+              dataType: typeof apiData
+            };
+            console.error('API route error response:', errorInfo);
+            
+            // Check if user already exists
+            if (apiData?.error?.includes('already exists') || 
+                apiData?.error?.includes('already registered') || 
+                apiResponse.status === 409) {
+              setError('An account with this email already exists. Please try logging in instead.');
+              setStep('login');
+              return;
+            }
+            
+            // Show detailed error message
+            const errorMessage = apiData?.details || apiData?.error || 'Failed to create account';
+            const errorHint = apiData?.hint ? ` ${apiData.hint}` : '';
+            const fullError = `${errorMessage}${errorHint}`;
+            console.error('Registration error:', fullError);
+            throw new Error(fullError);
+          }
+
+          // Sign in with the newly created account
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password: password,
+          });
+
+          if (signInError || !signInData?.user) {
+            throw new Error('Account created but failed to sign in. Please try logging in manually.');
+          }
+
+          // Success - use the sign-in data
+          signUpData = signInData;
+          signUpError = null;
+        } catch (apiError: any) {
+          console.error('API route registration failed:', apiError);
+          signUpError = apiError;
+          setError(apiError.message || 'There was an issue creating your account. Please try again or contact support.');
+          return;
+        }
+
+        if (signUpData?.user) {
+          const data = signUpData;
+          
+          // Upload profile photo if provided
+          let avatarUrl: string | null = null;
+          if (profilePhoto) {
+            avatarUrl = await uploadProfilePhoto(data.user.id);
+          }
+          
+          // Wait a moment for the database trigger to create the user in Users table (if it hasn't already)
+          // The trigger might take a moment to complete, so we'll retry if needed
+          let userExists = false;
+          let retries = 0;
+          const maxRetries = 5;
+          
+          while (!userExists && retries < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Check if user exists in Users table
+            const { data: userCheck, error: checkError } = await supabase
               .from('Users')
-              .update({ lastLoginAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+              .select('id')
+              .eq('id', data.user.id.toString())
+              .maybeSingle();
+            
+            if (userCheck) {
+              userExists = true;
+            } else if (checkError?.code === 'PGRST116') {
+              // User doesn't exist yet, continue waiting
+              retries++;
+              continue;
+            } else {
+              // Some other error, assume user exists or will be created
+              userExists = true;
+            }
+            
+            retries++;
+          }
+
+          // Update Users table with last login and avatar URL
+          // Try both 'Users' and 'User' table names for compatibility
+          const updateData: any = {
+            lastLoginAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          
+          if (avatarUrl) {
+            updateData.avatarUrl = avatarUrl;
+          }
+
+          // Try updating Users table first
+          try {
+            const { error: usersError } = await supabase
+              .from('Users')
+              .update(updateData)
               .eq('id', data.user.id.toString());
+            
+            if (usersError) {
+              console.warn('Error updating Users table, trying User table:', usersError);
+              // Try User table as fallback
+              await supabase
+                .from('User')
+                .update(updateData)
+                .eq('id', data.user.id.toString());
+            }
           } catch (err) {
-            console.error('Error updating last login:', err);
-            // Don't fail registration if this fails
+            console.error('Error updating user profile:', err);
+            // Don't fail registration if this fails - the trigger should have created the user
           }
           
           // Check user role and redirect accordingly
@@ -230,6 +416,97 @@ export function EmailAuth() {
     setName('');
     setSurname('');
     setError('');
+    setProfilePhoto(null);
+    setProfilePhotoPreview(null);
+  };
+
+  const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image size must be less than 5MB');
+      return;
+    }
+
+    setProfilePhoto(file);
+    setError('');
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfilePhotoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = () => {
+    setProfilePhoto(null);
+    setProfilePhotoPreview(null);
+  };
+
+  const uploadProfilePhoto = async (userId: string): Promise<string | null> => {
+    if (!profilePhoto) return null;
+
+    try {
+      setIsUploadingPhoto(true);
+
+      // Generate unique filename
+      const fileExt = profilePhoto.name.split('.').pop();
+      const fileName = `avatar-${userId}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${userId}/${fileName}`;
+
+      // Upload file to Supabase Storage (try user-avatars bucket, fallback to club-images)
+      let uploadData, uploadError, bucketName = 'user-avatars';
+      
+      const result = await supabase.storage
+        .from('user-avatars')
+        .upload(filePath, profilePhoto, {
+          cacheControl: '3600',
+          upsert: true
+        });
+      
+      uploadData = result.data;
+      uploadError = result.error;
+
+      // If user-avatars bucket doesn't exist, try club-images as fallback
+      if (uploadError && (uploadError.message.includes('Bucket not found') || uploadError.message.includes('not found'))) {
+        console.warn('user-avatars bucket not found, trying club-images as fallback');
+        bucketName = 'club-images';
+        const fallbackResult = await supabase.storage
+          .from('club-images')
+          .upload(filePath, profilePhoto, {
+            cacheControl: '3600',
+            upsert: true
+          });
+        uploadData = fallbackResult.data;
+        uploadError = fallbackResult.error;
+      }
+
+      if (uploadError) {
+        console.error('Error uploading profile photo:', uploadError);
+        return null;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(filePath);
+
+      return urlData?.publicUrl || null;
+    } catch (err) {
+      console.error('Error uploading profile photo:', err);
+      return null;
+    } finally {
+      setIsUploadingPhoto(false);
+    }
   };
 
   return (
@@ -398,6 +675,104 @@ export function EmailAuth() {
         {/* Register Step Form (Display Name + Password) */}
         {step === 'register' && (
           <form onSubmit={handleSubmit} className={styles.form}>
+            {/* Profile Photo Upload - At the top, circular */}
+            <div className={styles.formGroup} style={{ marginBottom: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div
+                style={{
+                  position: 'relative',
+                  display: 'inline-block',
+                  cursor: 'pointer',
+                  marginBottom: '8px'
+                }}
+                onClick={() => {
+                  const input = document.getElementById('register-avatar-upload') as HTMLInputElement;
+                  input?.click();
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.9';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                }}
+              >
+                <div style={{
+                  width: '120px',
+                  height: '120px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  border: '4px solid rgba(255, 255, 255, 0.3)',
+                  margin: '0 auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  fontSize: '48px',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  {profilePhotoPreview ? (
+                    <img 
+                      src={profilePhotoPreview} 
+                      alt="Profile preview" 
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '50%',
+                        objectFit: 'cover'
+                      }}
+                    />
+                  ) : (
+                    <span>
+                      {name.trim() ? name.charAt(0).toUpperCase() : '?'}
+                      {surname.trim() ? surname.charAt(0).toUpperCase() : ''}
+                    </span>
+                  )}
+                  {/* Upload overlay */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    color: '#ffffff',
+                    padding: '4px',
+                    fontSize: '10px',
+                    textAlign: 'center',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '30px'
+                  }}>
+                    {isUploadingPhoto ? 'Uploading...' : profilePhotoPreview ? '📷 Change' : '📷 Add photo'}
+                  </div>
+                </div>
+              </div>
+              <input
+                id="register-avatar-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleProfilePhotoChange}
+                disabled={isLoading || isUploadingPhoto}
+                style={{ display: 'none' }}
+              />
+              {profilePhotoPreview && (
+                <button
+                  type="button"
+                  className={styles.removePhotoButton}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemovePhoto();
+                  }}
+                  disabled={isLoading || isUploadingPhoto}
+                  style={{ marginTop: '8px', fontSize: '12px', padding: '4px 12px' }}
+                >
+                  Remove photo
+                </button>
+              )}
+            </div>
+
             {/* Show email (read-only) */}
             <div className={styles.formGroup}>
               <div className={styles.emailDisplay}>
@@ -471,10 +846,10 @@ export function EmailAuth() {
             <button
               type="submit"
               className={styles.submitButton}
-              disabled={isLoading}
+              disabled={isLoading || isUploadingPhoto}
             >
-              {isLoading ? (
-                <span>Creating account...</span>
+              {isLoading || isUploadingPhoto ? (
+                <span>{isUploadingPhoto ? 'Uploading photo...' : 'Creating account...'}</span>
               ) : (
                 <span>Sign up</span>
               )}

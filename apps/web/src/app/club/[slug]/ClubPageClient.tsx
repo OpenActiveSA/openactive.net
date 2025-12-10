@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { getClubCourts, SPORT_TYPE_LABELS, type Court } from '@/lib/courts';
 import { ClubAnimationProvider, useClubAnimation } from '@/components/club/ClubAnimationContext';
+import { getUserClubRole, type ClubRole } from '@/lib/club-roles';
 import ClubHeader from '@/components/club/ClubHeader';
 import ClubFooter from '@/components/club/ClubFooter';
 import ClubNotifications from '@/components/club/ClubNotifications';
@@ -120,6 +121,12 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
   // Load bookings for the selected date
   const [bookings, setBookings] = useState<any[]>([]);
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
+  
+  // User role and booking restrictions
+  const [userRole, setUserRole] = useState<ClubRole | 'SUPER_ADMIN' | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [userHasBookingForTimeSlot, setUserHasBookingForTimeSlot] = useState(false);
+  const [isLoadingUserRole, setIsLoadingUserRole] = useState(false);
   
   // Update selectedDate and selectedTime when URL params change
   useEffect(() => {
@@ -286,14 +293,123 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
     loadBookings();
   }, [club?.id, selectedDate]);
 
+  // Load user role and check if they have a booking for the selected time slot
+  useEffect(() => {
+    const loadUserRoleAndBookingStatus = async () => {
+      if (!user?.id || !club?.id || authLoading) {
+        setUserRole(null);
+        setIsSuperAdmin(false);
+        setUserHasBookingForTimeSlot(false);
+        setIsLoadingUserRole(false);
+        return;
+      }
+
+      setIsLoadingUserRole(true);
+      try {
+        const supabase = getSupabaseClientClient();
+        
+        // Check if user is SUPER_ADMIN (global role in Users table)
+        const { data: userData, error: userError } = await supabase
+          .from('Users')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!userError && userData?.role === 'SUPER_ADMIN') {
+          setIsSuperAdmin(true);
+          setUserRole('SUPER_ADMIN');
+          setUserHasBookingForTimeSlot(false); // Super admins can always book
+          setIsLoadingUserRole(false);
+          return;
+        }
+
+        // Get user's club role
+        const clubRole = await getUserClubRole(supabase, user.id, club.id);
+        setUserRole(clubRole);
+        setIsSuperAdmin(false);
+
+        // If user is CLUB_ADMIN, they can book multiple courts
+        if (clubRole === 'CLUB_ADMIN') {
+          setUserHasBookingForTimeSlot(false);
+          setIsLoadingUserRole(false);
+          return;
+        }
+
+        // For VISITOR and MEMBER, check if they have a booking for the selected date/time
+        if (selectedDate && selectedTime && (clubRole === 'VISITOR' || clubRole === 'MEMBER')) {
+          // Check if user has any booking for this date/time slot
+          const { data: userBookings, error: bookingError } = await supabase
+            .from('Bookings')
+            .select('id, startTime, endTime')
+            .eq('clubId', club.id)
+            .eq('bookingDate', selectedDate)
+            .in('status', ['pending', 'confirmed'])
+            .or(`userId.eq.${user.id},player1Id.eq.${user.id},player2Id.eq.${user.id},player3Id.eq.${user.id},player4Id.eq.${user.id}`);
+
+          if (!bookingError && userBookings && userBookings.length > 0) {
+            // Check if any booking overlaps with the selected time
+            const [selectedHour, selectedMin] = selectedTime.split(':').map(Number);
+            const selectedMinutes = selectedHour * 60 + selectedMin;
+
+            const hasOverlap = userBookings.some((booking: any) => {
+              const [startHour, startMin] = booking.startTime.split(':').map(Number);
+              const [endHour, endMin] = booking.endTime.split(':').map(Number);
+              const startMinutes = startHour * 60 + startMin;
+              const endMinutes = endHour * 60 + endMin;
+
+              // Check if selected time is within the booking time range
+              return selectedMinutes >= startMinutes && selectedMinutes < endMinutes;
+            });
+
+            setUserHasBookingForTimeSlot(hasOverlap);
+          } else {
+            setUserHasBookingForTimeSlot(false);
+          }
+        } else {
+          setUserHasBookingForTimeSlot(false);
+        }
+      } catch (err) {
+        console.error('Error loading user role and booking status:', err);
+        setUserRole(null);
+        setIsSuperAdmin(false);
+        setUserHasBookingForTimeSlot(false);
+      } finally {
+        setIsLoadingUserRole(false);
+      }
+    };
+
+    loadUserRoleAndBookingStatus();
+  }, [user?.id, club?.id, selectedDate, selectedTime, authLoading]);
+
   // Helper function to get booking for a specific court and time
   const getBookingForCourtAndTime = (courtId: string, time: string) => {
+    // Find the court object to get its name
+    const court = displayCourts.find(c => c.id === courtId);
+    const courtName = court?.name || '';
+    
+    // Extract court number from court name (e.g., "Court 1" -> 1, "Court 2" -> 2)
+    const courtNumberFromName = courtName ? parseInt(courtName.replace(/\D/g, '')) || null : null;
+    
     return bookings.find(booking => {
-      // Match by courtId if available, otherwise by courtNumber
-      const courtMatch = booking.courtId === courtId || 
-                        (courtId.includes('fallback-') && booking.courtNumber);
-      
-      if (!courtMatch) return false;
+      // Match by courtId if available
+      if (booking.courtId === courtId) {
+        // Time check will be done below
+      }
+      // Match by courtNumber if courtId doesn't match or is missing
+      else if (courtNumberFromName && booking.courtNumber === courtNumberFromName) {
+        // Time check will be done below
+      }
+      // Match fallback courts by courtNumber
+      else if (courtId.includes('fallback-') && booking.courtNumber) {
+        // Extract number from fallback ID (e.g., "fallback-1" -> 1)
+        const fallbackNumber = parseInt(courtId.replace(/\D/g, '')) || null;
+        if (fallbackNumber !== booking.courtNumber) {
+          return false;
+        }
+      }
+      else {
+        return false;
+      }
       
       // Check if time slot overlaps with booking
       const [bookingStartHour, bookingStartMin] = booking.startTime.split(':').map(Number);
@@ -604,7 +720,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
 
         {/* Court Selection */}
         <div className={styles.courtSelection}>
-          {isLoadingCourts || (selectedTime && isLoadingBookings) ? (
+          {isLoadingCourts || (selectedTime && isLoadingBookings) || (selectedTime && user && isLoadingUserRole) ? (
             <div className={styles.openLoader}>
               <span
                 className={`oa-open-o ${styles.openLoaderLetter}`}
@@ -746,54 +862,63 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                     </div>
                   )}
                   
-                  {/* Duration Selection - Show buttons if logged in and court is not booked, show tennis court icon if not logged in */}
+                  {/* Duration Selection - Show buttons if logged in and court is not booked, show tennis court icon if not logged in or if visitor/member has booking */}
                   {!authLoading && user ? (
                     !isBooked && validSessionDuration && validSessionDuration.length > 0 && (
-                      <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
-                          {validSessionDuration.map((duration) => (
-                            <button
-                              key={duration}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Always navigate to player selection with booking details
-                                const params = new URLSearchParams({
-                                  courtId: court.id,
-                                  court: court.name, // Keep for backwards compatibility
-                                  date: selectedDate,
-                                  duration: duration.toString()
-                                });
-                                // Add time if selected
-                                if (selectedTime) {
-                                  params.set('time', selectedTime);
-                                }
-                                router.push(`/club/${slug}/players?${params.toString()}`);
-                              }}
-                              className={`${styles.durationButton} ${selectedCourt === court.id && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
-                              style={{
-                                backgroundColor: actionColor,
-                                color: '#ffffff',
-                                border: `2px solid ${actionColor}`,
-                                borderRadius: '3px',
-                                padding: '8px 16px',
-                                fontSize: '14px',
-                                fontWeight: '500',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.05)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)';
-                              }}
-                            >
-                              {duration} min
-                            </button>
-                          ))}
+                      // Check if user is visitor/member and has a booking for this time slot
+                      // If so, show court icon instead of duration buttons
+                      (userHasBookingForTimeSlot && (userRole === 'VISITOR' || userRole === 'MEMBER')) ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                          <i className="oa-tennis-court" style={{ fontSize: '48px', color: fontColor, opacity: 0.6, display: 'inline-block' }}></i>
+                          <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
                         </div>
-                        <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
-                      </div>
+                      ) : (
+                        <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+                            {validSessionDuration.map((duration) => (
+                              <button
+                                key={duration}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Always navigate to player selection with booking details
+                                  const params = new URLSearchParams({
+                                    courtId: court.id,
+                                    court: court.name, // Keep for backwards compatibility
+                                    date: selectedDate,
+                                    duration: duration.toString()
+                                  });
+                                  // Add time if selected
+                                  if (selectedTime) {
+                                    params.set('time', selectedTime);
+                                  }
+                                  router.push(`/club/${slug}/players?${params.toString()}`);
+                                }}
+                                className={`${styles.durationButton} ${selectedCourt === court.id && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
+                                style={{
+                                  backgroundColor: actionColor,
+                                  color: '#ffffff',
+                                  border: `2px solid ${actionColor}`,
+                                  borderRadius: '3px',
+                                  padding: '8px 16px',
+                                  fontSize: '14px',
+                                  fontWeight: '500',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'scale(1.05)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'scale(1)';
+                                }}
+                              >
+                                {duration} min
+                              </button>
+                            ))}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
+                        </div>
+                      )
                     )
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
@@ -909,7 +1034,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                       )
                     ) : (
                       <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-                        <div style={{ fontSize: '48px', marginBottom: '8px' }}>🎾</div>
+                        <i className="oa-tennis-court" style={{ fontSize: '48px', color: fontColor, opacity: 0.6, display: 'inline-block', marginBottom: '8px' }}></i>
                         <div style={{ fontSize: '14px' }}>Login to book</div>
                       </div>
                     )}
