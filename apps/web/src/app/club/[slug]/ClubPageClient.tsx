@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
@@ -117,6 +117,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
   const [selectedCourt, setSelectedCourt] = useState<string | null>(null); // Changed to court ID
   const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
   const [dateScrollIndex, setDateScrollIndex] = useState<number>(0);
+  const dateScrollContainerRef = useRef<HTMLDivElement>(null);
   
   // Load bookings for the selected date
   const [bookings, setBookings] = useState<any[]>([]);
@@ -502,7 +503,8 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
     return dates;
   };
 
-  const dateButtons = generateDateButtons();
+  const dateButtons = useMemo(() => generateDateButtons(), []);
+
 
   // Find the closest time to current time
   const findClosestTime = useCallback((slots: string[], dateString: string): string | null => {
@@ -608,9 +610,17 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
               </button>
             )}
             
-            {/* Date Buttons Container */}
-            <div className={styles.dateButtonsGrid}>
-              {dateButtons.slice(dateScrollIndex, dateScrollIndex + 7).map((date) => (
+            {/* Date Buttons Container - Fixed width viewport */}
+            <div className={styles.dateButtonsViewport}>
+              <div 
+                ref={dateScrollContainerRef}
+                className={styles.dateButtonsGrid}
+                style={{
+                  transform: `translateX(-${dateScrollIndex * 50}%)`, /* Slide 50% of grid width = 7 dates (100% of viewport) */
+                  transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+              >
+                {dateButtons.map((date) => (
               <button
                 key={date.dateString}
                 onClick={() => handleDateChange(date.dateString)}
@@ -652,12 +662,13 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                 )}
               </button>
               ))}
+              </div>
             </div>
             
             {/* Right Arrow */}
-            {dateScrollIndex + 7 < dateButtons.length && (
+            {dateScrollIndex < Math.ceil(dateButtons.length / 7) - 1 && (
               <button
-                onClick={() => setDateScrollIndex(Math.min(dateButtons.length - 7, dateScrollIndex + 1))}
+                onClick={() => setDateScrollIndex(Math.min(Math.ceil(dateButtons.length / 7) - 1, dateScrollIndex + 1))}
                 className={styles.scrollArrow}
                 style={{ color: fontColor }}
                 onMouseEnter={(e) => {

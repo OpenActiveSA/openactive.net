@@ -5,17 +5,26 @@
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
-  padding: 40px 20px;
+  padding: 60px 20px;
 }
 
 /* Date Selection */
 .dateSelection {
-  margin-bottom: 42px;
+  margin-bottom: 32px;
   border-radius: 8px;
   position: relative;
 }
 
 @keyframes fadeInLetter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
   from {
     opacity: 0;
   }
@@ -62,19 +71,30 @@
   gap: 8px;
   width: 100%;
   flex-wrap: nowrap;
+  max-width: 550px;
+  margin: auto;
+}
+
+.dateButtonsViewport {
+  overflow: hidden;
+  width: 100%;
+  flex: 1;
+  position: relative;
 }
 
 .dateButtonsGrid {
   display: flex;
   gap: 8px;
-  overflow: visible;
-  max-width: 100%;
+  width: 200%; /* 14 dates, showing 7 at a time (14/7 = 2) */
   flex-shrink: 0;
+  will-change: transform;
 }
 
 .dateButton {
-  padding: 6px 12px;
-  font-size: 15px;
+  flex: 0 0 calc((100% - 104px) / 14); /* Grid is 200% of viewport, 14 buttons, 13 gaps of 8px = 104px total */
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 13px;
   font-weight: 500;
   background-color: #ffffff;
   border: 2px solid rgba(255, 255, 255, 0.2);
@@ -86,10 +106,17 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: fit-content;
   white-space: nowrap;
   text-align: center;
-  overflow: visible;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .dateButton {
+    font-size: 14px;
+    padding: 6px 12px;
+  }
 }
 
 .dateButton:hover {
@@ -274,7 +301,7 @@
 
 /* Time Selection */
 .timeSelection {
-  margin-bottom: 42px;
+  margin-bottom: 32px;
   border-radius: 8px;
 }
 
@@ -406,6 +433,236 @@
 .loginButton:hover {
   opacity: 1;
   background-color: rgba(5, 35, 51, 0.05);
+}
+
+/* Header Styles */
+.headerBackdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  transition: opacity 0.3s ease-out;
+}
+
+.headerContainer {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: #ffffff;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 16px 24px;
+}
+
+.headerInner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.logoContainer {
+  flex-shrink: 0;
+}
+
+.logoLink {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+}
+
+.logoImage {
+  max-height: 52px;
+  width: auto;
+  object-fit: contain;
+}
+
+.logoFallback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #052333;
+}
+
+.logoFallbackIcon {
+  font-size: 24px;
+  display: inline-block;
+}
+
+.userInfoContainer {
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.userNameContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.userNameText {
+  color: #052333;
+  font-size: 16px;
+  font-weight: 500;
+  padding: 0px 0px 5px 4px;
+  display: inline-block;
+  opacity: 0.9;
+  transition: opacity 0.2s;
+}
+
+.userNameText:hover {
+  opacity: 1;
+}
+
+.userRoleBadge {
+  font-size: 11px;
+  color: #ffffff;
+  background-color: #052333;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-top: -4px;
+  font-weight: 500;
+  text-transform: capitalize;
+  align-self: flex-end;
+  margin-right: 0px;
+  margin-bottom: 5px;
+}
+
+.profilePictureContainer {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid #052333;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f0f0f0;
+  transition: opacity 0.2s;
+}
+
+.profilePictureContainer:hover {
+  opacity: 0.8;
+}
+
+.profilePictureImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profilePictureInitials {
+  color: #052333;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.burgerMenuButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  transition: opacity 0.2s;
+}
+
+.burgerMenuButton:hover {
+  opacity: 0.7;
+}
+
+.burgerMenuIcon {
+  width: 20px;
+  height: 2px;
+  background-color: #052333;
+  border-radius: 2px;
+  transition: all 0.3s;
+}
+
+.headerSpacer {
+  width: 60px;
+  height: 40px;
+}
+
+/* Dropdown Menu */
+.dropdownMenu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 320px;
+  background-color: #ffffff;
+  z-index: 10001;
+  overflow-y: auto;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdownCloseButtonContainer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dropdownCloseButton {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #052333;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.dropdownCloseButton:hover {
+  background-color: rgba(5, 35, 51, 0.1);
+}
+
+.dropdownMenuItems {
+  flex: 1;
+  padding-top: 8px;
+}
+
+.dropdownMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #052333;
+  text-decoration: none;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.dropdownMenuItem:hover {
+  background-color: rgba(5, 35, 51, 0.05);
+}
+
+.dropdownMenuItemIcon {
+  font-size: 18px;
 }
 
 /* Footer */
@@ -630,7 +887,7 @@
 
 .rankingsContentContainer {
   flex: 1;
-  padding: 60px 20px;
+  padding: 70px 20px;
   max-width: 500px;
   width: 100%;
   margin: 0 auto;

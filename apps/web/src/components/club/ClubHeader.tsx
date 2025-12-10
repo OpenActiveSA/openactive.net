@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { useClubAnimation } from './ClubAnimationContext';
+import { getUserClubRole } from '@/lib/club-roles';
+import { generateSlug } from '@/lib/slug-utils';
 import styles from '@/styles/frontend.module.css';
 
 interface ClubHeaderProps {
@@ -23,6 +25,7 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
   const [userName, setUserName] = useState<string>('');
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [isLoadingName, setIsLoadingName] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
@@ -36,6 +39,18 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Prevent body scrolling when menu is open
+  useEffect(() => {
+    if (showDropdown) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showDropdown]);
   
   // Fetch user's name when logged in - check cache first, then metadata, then database
   useEffect(() => {
@@ -155,6 +170,91 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
     
     fetchUserName();
   }, [user]);
+
+  // Fetch user's role when on a club page
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      if (!user?.id || !currentPath || !currentPath.includes('/club/')) {
+        setUserRole(null);
+        return;
+      }
+
+      try {
+        const supabase = getSupabaseClientClient();
+        
+        // Extract club slug from currentPath (e.g., /club/constantiatennisclub/...)
+        const pathParts = currentPath.split('/');
+        const clubSlugIndex = pathParts.indexOf('club');
+        if (clubSlugIndex === -1 || clubSlugIndex + 1 >= pathParts.length) {
+          setUserRole(null);
+          return;
+        }
+        const clubSlug = pathParts[clubSlugIndex + 1];
+
+        // Get all clubs and find by slug
+        const { data: clubsData, error: clubsError } = await supabase
+          .from('Clubs')
+          .select('id')
+          .eq('is_active', true);
+
+        if (clubsError || !clubsData) {
+          console.error('Error fetching clubs for role:', clubsError);
+          setUserRole(null);
+          return;
+        }
+
+        // Find club by matching slug
+        const club = clubsData.find((c: any) => {
+          // We need to get the club name to generate slug, but we only have id
+          // Let's fetch the name as well
+          return false; // Will handle this differently
+        });
+
+        // Better approach: fetch clubs with names
+        const { data: clubsWithNames, error: clubsWithNamesError } = await supabase
+          .from('Clubs')
+          .select('id, name')
+          .eq('is_active', true);
+
+        if (clubsWithNamesError || !clubsWithNames) {
+          console.error('Error fetching clubs with names for role:', clubsWithNamesError);
+          setUserRole(null);
+          return;
+        }
+
+        const foundClub = clubsWithNames.find((c: any) => generateSlug(c.name) === clubSlug);
+        if (!foundClub) {
+          setUserRole(null);
+          return;
+        }
+
+        // Check if user is SUPER_ADMIN first
+        const { data: userData } = await supabase
+          .from('Users')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (userData?.role === 'SUPER_ADMIN') {
+          setUserRole('SUPER_ADMIN');
+          return;
+        }
+
+        // Get user's club role
+        const role = await getUserClubRole(supabase, user.id, foundClub.id);
+        setUserRole(role);
+      } catch (err) {
+        console.error('Error fetching user role:', err);
+        setUserRole(null);
+      }
+    };
+
+    if (mounted && !authLoading && user) {
+      fetchUserRole();
+    } else {
+      setUserRole(null);
+    }
+  }, [user, currentPath, mounted, authLoading]);
   
   // Determine active menu item based on current path
   const isActive = (path: string) => {
@@ -214,56 +314,48 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
   };
 
   return (
-    <header style={{
-      position: 'sticky',
-      top: 0,
-      zIndex: 100,
-      backgroundColor: '#ffffff',
-      backdropFilter: 'blur(10px)',
-      borderBottom: `1px solid rgba(0, 0, 0, 0.1)`,
-      padding: '16px 24px',
-      transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
-      opacity: headerVisible ? 1 : 0,
-      transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
-    }}>
-      <div style={{
-        maxWidth: '1200px',
-        margin: '0 auto',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '24px'
-      }}>
+    <>
+      {/* Backdrop - Outside header so it covers entire page */}
+      <div 
+        className={styles.headerBackdrop}
+        style={{
+          opacity: showDropdown ? 1 : 0,
+          pointerEvents: showDropdown ? 'auto' : 'none',
+          visibility: showDropdown ? 'visible' : 'hidden'
+        }}
+        onClick={() => setShowDropdown(false)}
+      />
+      
+      <header 
+        className={styles.headerContainer}
+        style={{
+          transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
+          opacity: headerVisible ? 1 : 0,
+          transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+      >
+      <div className={styles.headerInner}>
         {/* Logo - Left */}
-        <div style={{ flexShrink: 0 }}>
+        <div className={styles.logoContainer}>
           <Link 
             href={currentPath && currentPath.includes('/club/') 
               ? currentPath.split('/').slice(0, 3).join('/') // Extract /club/[slug] from currentPath
               : '/book'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              textDecoration: 'none',
-              color: 'inherit'
-            }}
+            className={styles.logoLink}
           >
             {logo && !logoError ? (
               <img 
                 src={logo} 
                 alt="Club logo" 
-                style={{ 
-                  maxHeight: '52px',
-                  width: 'auto',
-                  objectFit: 'contain'
-                }}
+                className={styles.logoImage}
                 onError={() => setLogoError(true)}
               />
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#052333' }}>
-                <i className="oa-open-o" style={{ fontSize: '24px', display: 'inline-block' }}></i>
-                <i className="oa-open-p" style={{ fontSize: '24px', display: 'inline-block' }}></i>
-                <i className="oa-open-e" style={{ fontSize: '24px', display: 'inline-block' }}></i>
-                <i className="oa-open-n" style={{ fontSize: '24px', display: 'inline-block' }}></i>
+              <div className={styles.logoFallback}>
+                <i className={`oa-open-o ${styles.logoFallbackIcon}`}></i>
+                <i className={`oa-open-p ${styles.logoFallbackIcon}`}></i>
+                <i className={`oa-open-e ${styles.logoFallbackIcon}`}></i>
+                <i className={`oa-open-n ${styles.logoFallbackIcon}`}></i>
               </div>
             )}
           </Link>
@@ -361,65 +453,37 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
         </nav>
 
         {/* User Name or Login Button - Right */}
-        <div style={{ flexShrink: 0, position: 'relative', display: 'flex', alignItems: 'center', gap: '12px' }} ref={dropdownRef}>
+        <div className={styles.userInfoContainer} ref={dropdownRef}>
           {mounted && !authLoading && user ? (
             <>
               <div 
-                style={{
-                  color: '#052333',
-                  fontSize: '16px',
-                  fontWeight: '500',
-                  padding: '8px 20px',
-                  display: 'inline-block',
-                  opacity: 0.9,
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  position: 'relative'
-                }}
+                className={styles.userNameContainer}
                 onClick={() => setShowDropdown(!showDropdown)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '1';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '0.9';
-                }}
               >
-                {getDisplayName()}
-                <span style={{ marginLeft: '8px', fontSize: '12px' }}>▼</span>
+                <div className={styles.userNameText}>
+                  {getDisplayName()}
+                </div>
+                {userRole && (
+                  <div className={styles.userRoleBadge}>
+                    {userRole === 'SUPER_ADMIN' ? 'Super Admin' : 
+                     userRole === 'CLUB_ADMIN' ? 'Club Manager' :
+                     userRole === 'COACH' ? 'Coach' :
+                     userRole === 'MEMBER' ? 'Member' :
+                     userRole === 'VISITOR' ? 'Visitor' : userRole}
+                  </div>
+                )}
               </div>
               
               {/* Profile Picture */}
               <div
+                className={styles.profilePictureContainer}
                 onClick={() => setShowDropdown(!showDropdown)}
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  overflow: 'hidden',
-                  cursor: 'pointer',
-                  border: '2px solid #052333',
-                  flexShrink: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#f0f0f0'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '0.8';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1';
-                }}
               >
                 {userAvatar ? (
                   <img 
                     src={userAvatar} 
                     alt={userName || 'User'} 
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover'
-                    }}
+                    className={styles.profilePictureImage}
                     onError={(e) => {
                       // Fallback to initials if image fails to load
                       const target = e.target as HTMLImageElement;
@@ -429,12 +493,15 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                         const initials = userName
                           ? userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
                           : user.email?.[0].toUpperCase() || 'U';
-                        parent.innerHTML = `<span style="color: #052333; font-weight: 600; font-size: 14px;">${initials}</span>`;
+                        const span = document.createElement('span');
+                        span.className = styles.profilePictureInitials;
+                        span.textContent = initials;
+                        parent.appendChild(span);
                       }
                     }}
                   />
                 ) : (
-                  <span style={{ color: '#052333', fontWeight: '600', fontSize: '14px' }}>
+                  <span className={styles.profilePictureInitials}>
                     {userName
                       ? userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
                       : user.email?.[0].toUpperCase() || 'U'}
@@ -442,326 +509,16 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                 )}
               </div>
               
-              {/* Dropdown Menu */}
-              {showDropdown && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: '8px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid rgba(0, 0, 0, 0.1)',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                  minWidth: '220px',
-                  zIndex: 1000,
-                  overflow: 'hidden'
-                }}>
-                  {currentPath && currentPath.includes('/club/') ? (
-                    <Link 
-                      href={`${currentPath.split('/').slice(0, 3).join('/')}/profile`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '12px 16px',
-                        color: '#052333',
-                        textDecoration: 'none',
-                        fontSize: '14px',
-                        borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                      onClick={() => setShowDropdown(false)}
-                    >
-                      <span style={{ fontSize: '18px' }}>👤</span>
-                      <span>My Profile</span>
-                    </Link>
-                  ) : (
-                    <Link 
-                      href="/profile" 
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '12px 16px',
-                        color: '#052333',
-                        textDecoration: 'none',
-                        fontSize: '14px',
-                        borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                      onClick={() => setShowDropdown(false)}
-                    >
-                      <span style={{ fontSize: '18px' }}>👤</span>
-                      <span>My Profile</span>
-                    </Link>
-                  )}
-                  
-                  <Link 
-                    href={currentPath && currentPath.includes('/club/') 
-                      ? `${currentPath.split('/').slice(0, 3).join('/')}/matches`
-                      : '/matches'} 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#052333',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={() => setShowDropdown(false)}
-                  >
-                    <span style={{ fontSize: '18px' }}>🏆</span>
-                    <span>Manage Matches</span>
-                  </Link>
-                  
-                  {currentPath && currentPath.includes('/club/') && (
-                    <Link 
-                      href={`${currentPath.split('/').slice(0, 3).join('/')}/events`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '12px 16px',
-                        color: '#052333',
-                        textDecoration: 'none',
-                        fontSize: '14px',
-                        borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                      onClick={() => setShowDropdown(false)}
-                    >
-                      <span style={{ fontSize: '18px' }}>📅</span>
-                      <span>Events</span>
-                    </Link>
-                  )}
-                  
-                  {currentPath && currentPath.includes('/club/') && (
-                    <Link 
-                      href={`${currentPath.split('/').slice(0, 3).join('/')}/members`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '12px 16px',
-                        color: '#052333',
-                        textDecoration: 'none',
-                        fontSize: '14px',
-                        borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                      onClick={() => setShowDropdown(false)}
-                    >
-                      <span style={{ fontSize: '18px' }}>👥</span>
-                      <span>Club Members</span>
-                    </Link>
-                  )}
-                  
-                  <Link 
-                    href={currentPath && currentPath.includes('/club/') 
-                      ? `${currentPath.split('/').slice(0, 3).join('/')}/documents`
-                      : '/documents'} 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#052333',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={() => setShowDropdown(false)}
-                  >
-                    <span style={{ fontSize: '18px' }}>📄</span>
-                    <span>Club Documents</span>
-                  </Link>
-                  
-                  <Link 
-                    href={currentPath && currentPath.includes('/club/') 
-                      ? `${currentPath.split('/').slice(0, 3).join('/')}/finance`
-                      : '/finance'} 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#052333',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={() => setShowDropdown(false)}
-                  >
-                    <span style={{ fontSize: '18px' }}>💰</span>
-                    <span>Finance</span>
-                  </Link>
-                  
-                  {currentPath && currentPath.includes('/club/') && (
-                    <Link 
-                      href={`${currentPath.split('/').slice(0, 3).join('/')}/rankings`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '12px 16px',
-                        color: '#052333',
-                        textDecoration: 'none',
-                        fontSize: '14px',
-                        borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                      onClick={() => setShowDropdown(false)}
-                    >
-                      <span style={{ fontSize: '18px' }}>📊</span>
-                      <span>Ranking</span>
-                    </Link>
-                  )}
-                  
-                  <div 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#052333',
-                      fontSize: '14px',
-                      cursor: 'pointer',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={handleSwitchClub}
-                  >
-                    <span style={{ fontSize: '18px' }}>🔄</span>
-                    <span>Switch Club</span>
-                  </div>
-                  
-                  <Link 
-                    href={currentPath && currentPath.includes('/club/') 
-                      ? `${currentPath.split('/').slice(0, 3).join('/')}/help`
-                      : '/help'} 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#052333',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={() => setShowDropdown(false)}
-                  >
-                    <span style={{ fontSize: '18px' }}>❓</span>
-                    <span>Help</span>
-                  </Link>
-                  
-                  <Link 
-                    href="http://opensport.co.za/" 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#052333',
-                      textDecoration: 'none',
-                      fontSize: '14px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(5, 35, 51, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={() => setShowDropdown(false)}
-                  >
-                    <span style={{ fontSize: '18px' }}>🛒</span>
-                    <span>Tennis Shop</span>
-                  </Link>
-                  
-                  <div 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      color: '#dc2626',
-                      fontSize: '14px',
-                      cursor: 'pointer',
-                      fontWeight: '500'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(220, 38, 38, 0.1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                    onClick={handleLogout}
-                  >
-                    <span style={{ fontSize: '18px' }}>🚪</span>
-                    <span>Log out</span>
-                  </div>
-                </div>
-              )}
+              {/* Burger Menu Icon */}
+              <button
+                className={styles.burgerMenuButton}
+                onClick={() => setShowDropdown(!showDropdown)}
+                aria-label="Toggle menu"
+              >
+                <span className={styles.burgerMenuIcon}></span>
+                <span className={styles.burgerMenuIcon}></span>
+                <span className={styles.burgerMenuIcon}></span>
+              </button>
             </>
           ) : mounted && !authLoading ? (
           <Link
@@ -779,10 +536,174 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             Login
           </Link>
           ) : (
-            <div style={{ width: '60px', height: '40px' }}></div>
+            <div className={styles.headerSpacer}></div>
           )}
         </div>
       </div>
     </header>
+    
+    {/* Dropdown Menu - Full Height, Slides from Right - Outside header for proper z-index stacking */}
+    {mounted && !authLoading && user && (
+      <div 
+        className={styles.dropdownMenu}
+        style={{
+          transform: showDropdown ? 'translateX(0)' : 'translateX(100%)',
+          pointerEvents: showDropdown ? 'auto' : 'none',
+          visibility: showDropdown ? 'visible' : 'hidden'
+        }}
+      >
+        {/* Close Button */}
+        <div className={styles.dropdownCloseButtonContainer}>
+          <button
+            className={styles.dropdownCloseButton}
+            onClick={() => setShowDropdown(false)}
+          >
+            ✕
+          </button>
+        </div>
+        
+        {/* Menu Items Container */}
+        <div className={styles.dropdownMenuItems}>
+          {currentPath && currentPath.includes('/club/') ? (
+            <Link 
+              href={`${currentPath.split('/').slice(0, 3).join('/')}/profile`}
+              className={styles.dropdownMenuItem}
+              onClick={() => setShowDropdown(false)}
+            >
+              <span className={styles.dropdownMenuItemIcon}>👤</span>
+              <span className={styles.dropdownMenuItemText}>My Profile</span>
+            </Link>
+          ) : (
+            <Link 
+              href="/profile" 
+              className={styles.dropdownMenuItem}
+              onClick={() => setShowDropdown(false)}
+            >
+              <span className={styles.dropdownMenuItemIcon}>👤</span>
+              <span className={styles.dropdownMenuItemText}>My Profile</span>
+            </Link>
+          )}
+          
+          <Link 
+            href={currentPath && currentPath.includes('/club/') 
+              ? `${currentPath.split('/').slice(0, 3).join('/')}/matches`
+              : '/matches'} 
+            className={styles.dropdownMenuItem}
+            onClick={() => setShowDropdown(false)}
+          >
+            <span className={styles.dropdownMenuItemIcon}>🏆</span>
+            <span className={styles.dropdownMenuItemText}>Manage Matches</span>
+          </Link>
+          
+          {currentPath && currentPath.includes('/club/') && (
+            <Link 
+              href={`${currentPath.split('/').slice(0, 3).join('/')}/events`}
+              className={styles.dropdownMenuItem}
+              onClick={() => setShowDropdown(false)}
+            >
+              <span className={styles.dropdownMenuItemIcon}>📅</span>
+              <span className={styles.dropdownMenuItemText}>Events</span>
+            </Link>
+          )}
+          
+          {currentPath && currentPath.includes('/club/') && (
+            <Link 
+              href={`${currentPath.split('/').slice(0, 3).join('/')}/members`}
+              className={styles.dropdownMenuItem}
+              onClick={() => setShowDropdown(false)}
+            >
+              <span className={styles.dropdownMenuItemIcon}>👥</span>
+              <span className={styles.dropdownMenuItemText}>Club Members</span>
+            </Link>
+          )}
+          
+          <Link 
+            href={currentPath && currentPath.includes('/club/') 
+              ? `${currentPath.split('/').slice(0, 3).join('/')}/documents`
+              : '/documents'} 
+            className={styles.dropdownMenuItem}
+            onClick={() => setShowDropdown(false)}
+          >
+            <span className={styles.dropdownMenuItemIcon}>📄</span>
+            <span className={styles.dropdownMenuItemText}>Club Documents</span>
+          </Link>
+          
+          <Link 
+            href={currentPath && currentPath.includes('/club/') 
+              ? `${currentPath.split('/').slice(0, 3).join('/')}/finance`
+              : '/finance'} 
+            className={styles.dropdownMenuItem}
+            onClick={() => setShowDropdown(false)}
+          >
+            <span className={styles.dropdownMenuItemIcon}>💰</span>
+            <span className={styles.dropdownMenuItemText}>Finance</span>
+          </Link>
+          
+          {currentPath && currentPath.includes('/club/') && (
+            <Link 
+              href={`${currentPath.split('/').slice(0, 3).join('/')}/rankings`}
+              className={styles.dropdownMenuItem}
+              onClick={() => setShowDropdown(false)}
+            >
+              <span className={styles.dropdownMenuItemIcon}>📊</span>
+              <span className={styles.dropdownMenuItemText}>Ranking</span>
+            </Link>
+          )}
+          
+          <div 
+            className={styles.dropdownMenuItem}
+            style={{
+              borderTop: '1px solid rgba(0, 0, 0, 0.1)',
+              marginTop: '8px'
+            }}
+            onClick={handleSwitchClub}
+          >
+            <span className={styles.dropdownMenuItemIcon}>🔄</span>
+            <span className={styles.dropdownMenuItemText}>Switch Club</span>
+          </div>
+          
+          <Link 
+            href={currentPath && currentPath.includes('/club/') 
+              ? `${currentPath.split('/').slice(0, 3).join('/')}/help`
+              : '/help'} 
+            className={styles.dropdownMenuItem}
+            onClick={() => setShowDropdown(false)}
+          >
+            <span className={styles.dropdownMenuItemIcon}>❓</span>
+            <span className={styles.dropdownMenuItemText}>Help</span>
+          </Link>
+          
+          <Link 
+            href="http://opensport.co.za/" 
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.dropdownMenuItem}
+            onClick={() => setShowDropdown(false)}
+          >
+            <span className={styles.dropdownMenuItemIcon}>🛒</span>
+            <span className={styles.dropdownMenuItemText}>Tennis Shop</span>
+          </Link>
+          
+          <div 
+            className={styles.dropdownMenuItem}
+            style={{
+              color: '#dc2626',
+              fontWeight: '500'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(220, 38, 38, 0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            onClick={handleLogout}
+          >
+            <span className={styles.dropdownMenuItemIcon}>🚪</span>
+            <span className={styles.dropdownMenuItemText}>Log out</span>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
