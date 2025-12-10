@@ -604,7 +604,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
 
         {/* Court Selection */}
         <div className={styles.courtSelection}>
-          {isLoadingCourts ? (
+          {isLoadingCourts || (selectedTime && isLoadingBookings) ? (
             <div className={styles.openLoader}>
               <span
                 className={`oa-open-o ${styles.openLoaderLetter}`}
@@ -811,7 +811,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
         {/* Original court display code - keeping for backwards compatibility */}
         {selectedDate && !selectedTime && (
           <div className={styles.courtSelection}>
-            {isLoadingCourts ? (
+            {isLoadingCourts || isLoadingBookings ? (
               <div className={styles.openLoader}>
                 <span
                   className={`oa-open-o ${styles.openLoaderLetter}`}

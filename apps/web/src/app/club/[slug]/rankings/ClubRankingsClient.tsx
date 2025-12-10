@@ -352,7 +352,7 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
           padding: '60px 20px',
           gap: '16px'
         }}>
-          <OpenActiveLoader fontColor={clubSettings.fontColor} size={48} />
+          <OpenActiveLoader fontColor="#ffffff" size={48} />
         </div>
       ) : (
         <>
