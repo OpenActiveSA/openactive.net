@@ -4,25 +4,40 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { ClubAnimationProvider, useClubAnimation } from '@/components/club/ClubAnimationContext';
+import ClubHeader from '@/components/club/ClubHeader';
 import ClubFooter from '@/components/club/ClubFooter';
+import OpenActiveLoader from '@/components/OpenActiveLoader';
+import type { ClubSettings } from '@/lib/club-settings';
 
 interface UserProfile {
   id: string;
   Firstname?: string;
   Surname?: string;
-  name?: string;
   email?: string;
   avatarUrl?: string;
   role?: string;
+  bio?: string;
 }
 
-export default function ProfilePage() {
+interface ClubProfileClientProps {
+  slug: string;
+  clubSettings: ClubSettings;
+}
+
+function ClubProfileContent({ slug, clubSettings }: ClubProfileClientProps) {
   const { user } = useAuth();
+  const { contentVisible } = useClubAnimation();
+  
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [bio, setBio] = useState('');
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [isSavingBio, setIsSavingBio] = useState(false);
 
+  // Load user profile
   useEffect(() => {
     const loadProfile = async () => {
       if (!user?.id) {
@@ -33,140 +48,29 @@ export default function ProfilePage() {
       try {
         const supabase = getSupabaseClientClient();
         
-        // Try Users table first (most common), fallback to User if needed
-        let data, error;
+        const result = await supabase
+          .from('Users')
+          .select('id, Firstname, Surname, email, avatarUrl, role, bio')
+          .eq('id', user.id)
+          .maybeSingle();
         
-        try {
-          const result = await supabase
-            .from('Users')
-            .select('id, Firstname, Surname, email, avatarUrl, role')
-            .eq('id', user.id)
-            .maybeSingle();
-          
-          data = result.data;
-          error = result.error;
-          
-          if (error) {
-            console.error('Error querying Users table:', {
-              error: error,
-              message: error?.message,
-              details: error?.details,
-              hint: error?.hint,
-              code: error?.code,
-              errorString: String(error),
-              errorKeys: error ? Object.keys(error) : []
-            });
-            
-            // If Users table doesn't exist, try User table
-            if (error.code === '42P01' || error.code === 'PGRST116' || 
-                error.message?.includes('does not exist') || 
-                error.message?.includes('relation') ||
-                error.details?.includes('does not exist')) {
-              console.warn('Users table not found, trying User table');
-              
-              const fallbackResult = await supabase
-                .from('User')
-                .select('id, Firstname, Surname, email, avatarUrl, role')
-                .eq('id', user.id)
-                .maybeSingle();
-              
-              data = fallbackResult.data;
-              error = fallbackResult.error;
-              
-              if (fallbackResult.error) {
-                console.error('Error querying User table:', {
-                  error: fallbackResult.error,
-                  message: fallbackResult.error?.message,
-                  details: fallbackResult.error?.details,
-                  hint: fallbackResult.error?.hint,
-                  code: fallbackResult.error?.code
-                });
-              }
-            }
-          }
-        } catch (queryErr: any) {
-          console.error('Exception during database query:', {
-            error: queryErr,
-            message: queryErr?.message,
-            stack: queryErr?.stack,
-            name: queryErr?.name,
-            errorString: String(queryErr)
-          });
-          error = queryErr;
+        if (result.data) {
+          setProfile(result.data);
+          setBio(result.data.bio || '');
         }
-
-        if (error) {
-          // Log error but don't throw - allow page to render with defaults
-          console.error('Final error state:', {
-            hasError: !!error,
-            errorType: typeof error,
-            errorConstructor: error?.constructor?.name,
-            errorMessage: error?.message,
-            errorCode: error?.code,
-            errorDetails: error?.details
-          });
-        }
-
-        if (data) {
-          setProfile(data);
-        } else if (!error) {
-          // No data and no error - user might not exist in Users table yet
-          console.warn('User profile not found in database, using defaults');
-        }
-      } catch (err: unknown) {
-        // Extract error message from various possible error formats
-        let errorMessage = 'Unknown error';
-        let errorDetails: any = null;
-        
-        if (err) {
-          if (typeof err === 'string') {
-            errorMessage = err;
-          } else if (err instanceof Error) {
-            errorMessage = err.message || 'An error occurred';
-            errorDetails = {
-              name: err.name,
-              stack: err.stack
-            };
-          } else if (typeof err === 'object') {
-            const errObj = err as any;
-            errorMessage = errObj.message || 
-                          errObj.error?.message || 
-                          errObj.details || 
-                          errObj.hint || 
-                          'An error occurred';
-            errorDetails = {
-              code: errObj.code,
-              details: errObj.details,
-              hint: errObj.hint,
-              message: errObj.message,
-              keys: Object.keys(errObj)
-            };
-          } else {
-            errorMessage = String(err) || 'Unknown error occurred';
-          }
-        }
-        
-        console.error('Catch block - Error loading profile:', {
-          errorMessage,
-          errorDetails,
-          errorType: err instanceof Error ? 'Error' : typeof err,
-          error: err,
-          errorString: String(err)
-        });
+      } catch (err) {
+        console.error('Error loading profile:', err);
       } finally {
         setIsLoading(false);
       }
     };
 
     loadProfile();
-  }, [user]);
+  }, [user?.id]);
 
   const displayName = profile?.Firstname && profile?.Surname
     ? `${profile.Firstname} ${profile.Surname}`
-    : profile?.Firstname || profile?.Surname || 
-    (profile?.Firstname && profile?.Surname 
-      ? `${profile.Firstname} ${profile.Surname}` 
-      : profile?.Firstname || profile?.Surname || profile?.email?.split('@')[0] || 'Player Name');
+    : profile?.Firstname || profile?.Surname || profile?.email?.split('@')[0] || 'Player Name';
 
   const initials = displayName
     .split(' ')
@@ -210,7 +114,7 @@ export default function ProfilePage() {
         .from('user-avatars')
         .upload(filePath, file, {
           cacheControl: '3600',
-          upsert: true // Allow overwriting existing avatar
+          upsert: true
         });
       
       uploadData = result.data;
@@ -252,17 +156,7 @@ export default function ProfilePage() {
           .update({ avatarUrl: urlData.publicUrl })
           .eq('id', user.id);
 
-        // Try User table if Users doesn't work
-        if (updateError && (updateError.code === '42P01' || updateError.message?.includes('does not exist'))) {
-          const { error: fallbackUpdateError } = await supabase
-            .from('User')
-            .update({ avatarUrl: urlData.publicUrl })
-            .eq('id', user.id);
-          
-          if (fallbackUpdateError) {
-            throw fallbackUpdateError;
-          }
-        } else if (updateError) {
+        if (updateError) {
           throw updateError;
         }
 
@@ -281,59 +175,71 @@ export default function ProfilePage() {
     }
   };
 
+  // Handle bio save
+  const handleSaveBio = async () => {
+    if (!user?.id) return;
+
+    setIsSavingBio(true);
+    try {
+      const supabase = getSupabaseClientClient();
+      const { error } = await supabase
+        .from('Users')
+        .update({ bio: bio })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setProfile(prev => prev ? { ...prev, bio: bio } : null);
+      setIsEditingBio(false);
+    } catch (err: any) {
+      console.error('Error saving bio:', err);
+      alert('Failed to save. Please try again.');
+    } finally {
+      setIsSavingBio(false);
+    }
+  };
+
   return (
     <ProtectedRoute>
-      <div style={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
-        {/* Header */}
-        <header style={{
-          backgroundColor: '#ffffff',
-          borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
-          padding: '16px 24px',
+      <div 
+        style={{
+          minHeight: '100vh',
+          backgroundColor: clubSettings.backgroundColor,
+          color: clubSettings.fontColor,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <button
-            onClick={() => window.history.back()}
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '16px',
-              color: '#052333',
-              cursor: 'pointer',
-              padding: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            <span>←</span>
-            <span>Menu</span>
-          </button>
-          
-          <div style={{ fontSize: '20px', fontWeight: '600', color: '#052333' }}>
-            <span style={{ color: '#052333' }}>open</span>
-            <span style={{ color: '#14b8a6' }}>active</span>
-          </div>
-
-          <div style={{ width: '40px', height: '40px' }}></div>
-        </header>
+          flexDirection: 'column',
+        }}
+      >
+        <ClubHeader 
+          logo={clubSettings.logo}
+          fontColor={clubSettings.fontColor} 
+          backgroundColor={clubSettings.backgroundColor}
+          selectedColor={clubSettings.selectedColor}
+          currentPath={`/club/${slug}/profile`}
+        />
 
         {isLoading ? (
-          <div style={{
-            minHeight: '60vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+          <div style={{ 
+            flex: 1,
+            display: 'flex', 
+            flexDirection: 'column',
+            alignItems: 'center', 
+            justifyContent: 'center',
+            padding: '60px 20px',
+            gap: '16px'
           }}>
-            <div style={{ color: '#666', fontSize: '16px' }}>Loading...</div>
+            <OpenActiveLoader fontColor={clubSettings.fontColor} size={48} />
           </div>
         ) : (
-          <>
+          <div style={{
+            opacity: contentVisible ? 1 : 0,
+            transform: contentVisible ? 'translateY(0)' : 'translateY(20px)',
+            transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+          }}>
             {/* Profile Banner */}
             <div style={{
               position: 'relative',
-              backgroundColor: '#052333',
+              backgroundColor: clubSettings.backgroundColor,
               paddingTop: '60px',
               paddingBottom: '40px',
               textAlign: 'center'
@@ -348,7 +254,7 @@ export default function ProfilePage() {
                 backgroundImage: 'url(https://images.unsplash.com/photo-1622279457484731-3f12d8cb64d9?w=1200)',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
-                opacity: 0.3
+                opacity: 0.2
               }}></div>
 
               {/* Profile Avatar */}
@@ -377,13 +283,13 @@ export default function ProfilePage() {
                     width: '120px',
                     height: '120px',
                     borderRadius: '50%',
-                    backgroundColor: '#052333',
-                    border: '4px solid #fbbf24',
+                    backgroundColor: clubSettings.backgroundColor,
+                    border: `4px solid ${clubSettings.selectedColor}`,
                     margin: '0 auto',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#ffffff',
+                    color: clubSettings.fontColor,
                     fontSize: '48px',
                     fontWeight: '600',
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
@@ -411,7 +317,7 @@ export default function ProfilePage() {
                       left: 0,
                       right: 0,
                       backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                      color: '#ffffff',
+                      color: clubSettings.fontColor,
                       padding: '4px',
                       fontSize: '10px',
                       textAlign: 'center',
@@ -436,8 +342,8 @@ export default function ProfilePage() {
                   <div style={{
                     marginTop: '8px',
                     padding: '8px 12px',
-                    backgroundColor: '#fee2e2',
-                    color: '#991b1b',
+                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                    color: clubSettings.fontColor,
                     borderRadius: '6px',
                     fontSize: '12px',
                     textAlign: 'center',
@@ -458,7 +364,7 @@ export default function ProfilePage() {
                 <h1 style={{
                   fontSize: '28px',
                   fontWeight: '700',
-                  color: '#ffffff',
+                  color: clubSettings.fontColor,
                   margin: 0
                 }}>
                   {displayName}
@@ -473,8 +379,8 @@ export default function ProfilePage() {
               }}>
                 <div style={{
                   display: 'inline-block',
-                  backgroundColor: '#fbbf24',
-                  color: '#052333',
+                  backgroundColor: clubSettings.selectedColor,
+                  color: '#ffffff',
                   padding: '8px 20px',
                   borderRadius: '20px',
                   fontSize: '14px',
@@ -493,7 +399,7 @@ export default function ProfilePage() {
                 padding: '0 24px'
               }}>
                 <p style={{
-                  color: 'rgba(255, 255, 255, 0.9)',
+                  color: `rgba(255, 255, 255, 0.9)`,
                   fontSize: '14px',
                   lineHeight: '1.6',
                   margin: 0
@@ -505,17 +411,19 @@ export default function ProfilePage() {
 
             {/* Profile Content */}
             <div style={{
+              flex: 1,
               maxWidth: '800px',
               margin: '0 auto',
-              padding: '32px 24px'
+              padding: '32px 24px',
+              width: '100%',
+              backgroundColor: '#ffffff'
             }}>
               {/* Basic Info Card */}
               <div style={{
                 backgroundColor: '#ffffff',
-                borderRadius: '12px',
+                borderRadius: '3px',
                 padding: '24px',
-                marginBottom: '24px',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                marginBottom: '24px'
               }}>
                 <h2 style={{
                   fontSize: '20px',
@@ -545,19 +453,101 @@ export default function ProfilePage() {
                     </div>
                   )}
 
-                  {profile?.email && (
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Email</div>
-                      <div style={{ fontSize: '16px', color: '#052333', fontWeight: '500' }}>
-                        {profile.email}
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>About</div>
+                    {isEditingBio ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <textarea
+                          value={bio}
+                          onChange={(e) => setBio(e.target.value)}
+                          placeholder="Tell us about yourself..."
+                          style={{
+                            width: '100%',
+                            minHeight: '100px',
+                            padding: '12px',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '3px',
+                            fontSize: '16px',
+                            color: '#052333',
+                            fontFamily: 'inherit',
+                            resize: 'vertical'
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={handleSaveBio}
+                            disabled={isSavingBio}
+                            style={{
+                              backgroundColor: clubSettings.selectedColor,
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '3px',
+                              padding: '8px 16px',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              cursor: isSavingBio ? 'not-allowed' : 'pointer',
+                              opacity: isSavingBio ? 0.6 : 1
+                            }}
+                          >
+                            {isSavingBio ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setBio(profile?.bio || '');
+                              setIsEditingBio(false);
+                            }}
+                            disabled={isSavingBio}
+                            style={{
+                              backgroundColor: '#f3f4f6',
+                              color: '#052333',
+                              border: 'none',
+                              borderRadius: '3px',
+                              padding: '8px 16px',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              cursor: isSavingBio ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{ 
+                          fontSize: '16px', 
+                          color: '#052333', 
+                          fontWeight: '400',
+                          lineHeight: '1.5',
+                          flex: 1,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word'
+                        }}>
+                          {bio || 'Tell us about yourself...'}
+                        </div>
+                        <button
+                          onClick={() => setIsEditingBio(true)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: clubSettings.selectedColor,
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            cursor: 'pointer',
+                            padding: '4px 8px',
+                            flexShrink: 0
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   {profile?.role && (
                     <div>
                       <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Role</div>
-                      <div style={{ fontSize: '16px', color: '#052333', fontWeight: '500' }}>
+                      <div style={{ fontSize: '16px', color: '#ffffff', fontWeight: '500' }}>
                         {profile.role}
                       </div>
                     </div>
@@ -565,12 +555,20 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
-          </>
+          </div>
         )}
 
-        <ClubFooter fontColor="#ffffff" />
+        <ClubFooter fontColor={clubSettings.fontColor} />
       </div>
     </ProtectedRoute>
+  );
+}
+
+export default function ClubProfileClient(props: ClubProfileClientProps) {
+  return (
+    <ClubAnimationProvider>
+      <ClubProfileContent {...props} />
+    </ClubAnimationProvider>
   );
 }
 

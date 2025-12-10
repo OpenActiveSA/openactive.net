@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
+import { useClubAnimation } from './ClubAnimationContext';
 import styles from '@/styles/frontend.module.css';
 
 interface ClubHeaderProps {
@@ -17,24 +18,83 @@ interface ClubHeaderProps {
 
 export default function ClubHeader({ logo, fontColor, backgroundColor, selectedColor, currentPath }: ClubHeaderProps) {
   const [logoError, setLogoError] = useState(false);
+  const { user, loading: authLoading, signOut } = useAuth();
+  // Initialize userName as empty - we'll fetch the real name and only show email as fallback in render
   const [userName, setUserName] = useState<string>('');
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  const [isLoadingName, setIsLoadingName] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const { user, loading: authLoading, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Always call the hook - it returns safe defaults if context is not available
+  const { headerVisible } = useClubAnimation();
 
   // Prevent hydration mismatch by only rendering auth-dependent content after mount
   useEffect(() => {
     setMounted(true);
   }, []);
   
-  // Fetch user's name when logged in
+  // Fetch user's name when logged in - check cache first, then metadata, then database
   useEffect(() => {
     const fetchUserName = async () => {
       if (user && user.id) {
+        // First, check localStorage cache (instant, no network call)
+        const cacheKey = `user_name_${user.id}`;
+        const avatarCacheKey = `user_avatar_${user.id}`;
+        const cachedName = typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null;
+        const cachedAvatar = typeof window !== 'undefined' ? localStorage.getItem(avatarCacheKey) : null;
+        
+        if (cachedName) {
+          setUserName(cachedName);
+          setIsLoadingName(false);
+          // Still fetch in background to update cache if name changed
+        } else {
+          setIsLoadingName(true);
+        }
+        
+        if (cachedAvatar) {
+          setUserAvatar(cachedAvatar);
+          // Preload the image for instant display
+          if (typeof window !== 'undefined' && cachedAvatar) {
+            const img = new Image();
+            img.src = cachedAvatar;
+          }
+        }
+        
+        // Check user metadata (fast, no database call)
+        const metadataName = user.user_metadata?.full_name || user.user_metadata?.name;
+        const metadataAvatar = user.user_metadata?.avatar_url || user.user_metadata?.avatarUrl;
+        
+        if (metadataName && !cachedName) {
+          setUserName(metadataName);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(cacheKey, metadataName);
+          }
+          setIsLoadingName(false);
+        }
+        
+        if (metadataAvatar && !cachedAvatar) {
+          setUserAvatar(metadataAvatar);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(avatarCacheKey, metadataAvatar);
+            // Preload the image
+            const img = new Image();
+            img.src = metadataAvatar;
+          }
+        }
+        
+        // If we have both from cache/metadata, we can return early
+        if (cachedName && cachedAvatar) {
+          // Still fetch in background to update cache if data changed
+          setIsLoadingName(false);
+        } else if (metadataName && metadataAvatar) {
+          return;
+        }
+        
+        // Fetch from database (only if not cached)
         try {
           const supabase = getSupabaseClientClient();
           const { data: userData, error } = await supabase
@@ -45,32 +105,51 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
           
           if (error) {
             console.error('Error fetching user name from database:', error);
-            setUserName(user.email?.split('@')[0] || 'User');
             setUserAvatar(null);
+            setIsLoadingName(false);
             return;
           }
           
           if (userData) {
-            console.log('Fetched user data from database:', userData);
             const name = userData.Firstname && userData.Surname 
                           ? `${userData.Firstname} ${userData.Surname}` 
                           : userData.Firstname || userData.Surname || '';
-            const finalName = name || user.email?.split('@')[0] || 'User';
-            console.log('Setting user name to:', finalName);
-            setUserName(finalName);
-            setUserAvatar(userData.avatarUrl || null);
+            if (name) {
+              setUserName(name);
+              // Cache for next time
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(cacheKey, name);
+              }
+            }
+            const avatarUrl = userData.avatarUrl || null;
+            setUserAvatar(avatarUrl);
+            // Cache avatar URL for next time and preload image
+            if (typeof window !== 'undefined') {
+              const avatarCacheKey = `user_avatar_${user.id}`;
+              if (avatarUrl) {
+                localStorage.setItem(avatarCacheKey, avatarUrl);
+                // Preload the image for instant display next time
+                const img = new Image();
+                img.src = avatarUrl;
+              } else {
+                localStorage.removeItem(avatarCacheKey);
+              }
+            }
           } else {
-            console.log('No user data found in database, using email fallback');
-            setUserName(user.email?.split('@')[0] || 'User');
             setUserAvatar(null);
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem(`user_avatar_${user.id}`);
+            }
           }
+          setIsLoadingName(false);
         } catch (err) {
           console.error('Error fetching user name:', err);
-          setUserName(user.email?.split('@')[0] || 'User');
+          setIsLoadingName(false);
         }
       } else {
         setUserName('');
         setUserAvatar(null);
+        setIsLoadingName(false);
       }
     };
     
@@ -89,6 +168,15 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
   };
   
   const activeColor = selectedColor || '#667eea';
+  
+  // Helper to get display name - formats email prefix consistently
+  const getDisplayName = () => {
+    if (userName) return userName;
+    if (!user?.email) return 'User';
+    const emailPrefix = user.email.split('@')[0];
+    // Capitalize first letter to match name format
+    return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1).toLowerCase();
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -133,7 +221,10 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
       backgroundColor: '#ffffff',
       backdropFilter: 'blur(10px)',
       borderBottom: `1px solid rgba(0, 0, 0, 0.1)`,
-      padding: '16px 24px'
+      padding: '16px 24px',
+      transform: headerVisible ? 'translateY(0)' : 'translateY(-100%)',
+      opacity: headerVisible ? 1 : 0,
+      transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
     }}>
       <div style={{
         maxWidth: '1200px',
@@ -293,7 +384,7 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                   e.currentTarget.style.opacity = '0.9';
                 }}
               >
-                {userName || user.email?.split('@')[0] || 'User'}
+                {getDisplayName()}
                 <span style={{ marginLeft: '8px', fontSize: '12px' }}>▼</span>
               </div>
               
@@ -695,4 +786,3 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
     </header>
   );
 }
-

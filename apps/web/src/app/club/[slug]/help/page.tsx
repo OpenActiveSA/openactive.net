@@ -1,12 +1,12 @@
 import { use } from 'react';
 import { getClubSettings } from '@/lib/club-settings';
-import ClubMembersClient from './ClubMembersClient';
+import ClubHelpClient from './ClubHelpClient';
 
-interface ClubMembersPageProps {
+interface ClubHelpPageProps {
   params: Promise<{ slug: string }>;
 }
 
-export default async function ClubMembersPage({ params }: ClubMembersPageProps) {
+export default async function ClubHelpPage({ params }: ClubHelpPageProps) {
   const { slug } = await params;
   const clubSettings = await getClubSettings(slug);
 
@@ -25,6 +25,5 @@ export default async function ClubMembersPage({ params }: ClubMembersPageProps) 
     );
   }
 
-  return <ClubMembersClient slug={slug} clubSettings={clubSettings} />;
+  return <ClubHelpClient slug={slug} clubSettings={clubSettings} />;
 }
-

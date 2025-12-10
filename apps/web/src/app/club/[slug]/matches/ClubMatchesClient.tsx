@@ -6,8 +6,12 @@ import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { ClubAnimationProvider, useClubAnimation } from '@/components/club/ClubAnimationContext';
 import ClubHeader from '@/components/club/ClubHeader';
 import ClubFooter from '@/components/club/ClubFooter';
+import ClubNotifications from '@/components/club/ClubNotifications';
+import OpenActiveLoader from '@/components/OpenActiveLoader';
+import type { ClubSettings } from '@/lib/club-settings';
 
 interface Player {
   id?: string;
@@ -43,17 +47,24 @@ interface MatchResult {
   booking?: Booking;
 }
 
-export default function ManageMatchesPage() {
+interface ClubMatchesClientProps {
+  slug: string;
+  clubSettings: ClubSettings;
+}
+
+function ClubMatchesContent({ slug, clubSettings }: ClubMatchesClientProps) {
   const { user } = useAuth();
   const router = useRouter();
+  const { contentVisible } = useClubAnimation();
+  
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
       if (!user?.id) {
-        setIsLoading(false);
+        setIsLoadingData(false);
         return;
       }
 
@@ -235,12 +246,16 @@ export default function ManageMatchesPage() {
       } catch (err) {
         console.error('Error loading data:', err);
       } finally {
-        setIsLoading(false);
+        setIsLoadingData(false);
       }
     };
 
-    loadData();
-  }, [user]);
+    if (user?.id) {
+      loadData();
+    } else {
+      setIsLoadingData(false);
+    }
+  }, [user?.id]);
 
   // Separate active and past bookings
   const { activeBookings, pastBookings } = useMemo(() => {
@@ -327,38 +342,69 @@ export default function ManageMatchesPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <ProtectedRoute>
-        <div style={{ minHeight: '100vh', backgroundColor: '#052333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ color: '#ffffff', fontSize: '16px' }}>Loading...</div>
-        </div>
-      </ProtectedRoute>
-    );
-  }
-
   return (
     <ProtectedRoute>
-      <div style={{ minHeight: '100vh', backgroundColor: '#052333', color: '#ffffff', display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        @media (min-width: 768px) {
+          .matches-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+        @media (min-width: 1024px) {
+          .matches-grid {
+            grid-template-columns: repeat(3, 1fr) !important;
+          }
+        }
+      `}</style>
+      <div style={{ minHeight: '100vh', backgroundColor: clubSettings.backgroundColor, color: clubSettings.fontColor, display: 'flex', flexDirection: 'column' }}>
         <ClubHeader 
-          fontColor="#052333" 
-          selectedColor="#667eea" 
-          currentPath="/matches"
+          logo={clubSettings.logo}
+          fontColor={clubSettings.fontColor} 
+          backgroundColor={clubSettings.backgroundColor}
+          selectedColor={clubSettings.selectedColor}
+          currentPath={`/club/${slug}/matches`}
         />
+        <ClubNotifications clubId={clubSettings.id} fontColor={clubSettings.fontColor} />
 
-        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px', flex: 1 }}>
+        <div style={{ 
+          maxWidth: '1200px', 
+          margin: '0 auto', 
+          padding: '24px', 
+          flex: 1,
+          opacity: contentVisible ? 1 : 0,
+          transform: contentVisible ? 'translateY(0)' : 'translateY(20px)',
+          transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}>
+          {isLoadingData ? (
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center', 
+              justifyContent: 'center',
+              padding: '60px 20px',
+              gap: '16px'
+            }}>
+              <OpenActiveLoader fontColor={clubSettings.fontColor} size={48} />
+            </div>
+          ) : (
+            <>
           {/* Manage matches section */}
           <h2 style={{
             fontSize: '24px',
             fontWeight: '600',
-            color: '#ffffff',
+            color: clubSettings.fontColor,
             marginBottom: '24px',
             textAlign: 'center'
           }}>
             Manage matches
           </h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '48px' }}>
+          <div className="matches-grid" style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr',
+            gap: '16px', 
+            marginBottom: '48px'
+          }}>
             {/* Active bookings */}
             {activeBookings.map(booking => {
               const date = formatDate(booking.bookingDate);
@@ -369,8 +415,8 @@ export default function ManageMatchesPage() {
                 <div
                   key={booking.id}
                   style={{
-                    backgroundColor: isActive ? '#667eea' : '#9ca3af',
-                    borderRadius: '12px',
+                    backgroundColor: isActive ? clubSettings.selectedColor : '#9ca3af',
+                    borderRadius: '3px',
                     padding: '20px',
                     position: 'relative',
                     color: '#ffffff'
@@ -389,7 +435,7 @@ export default function ManageMatchesPage() {
                       right: '16px',
                       background: 'rgba(255, 255, 255, 0.2)',
                       border: 'none',
-                      borderRadius: '6px',
+                      borderRadius: '3px',
                       padding: '8px',
                       cursor: 'pointer',
                       color: '#ffffff',
@@ -471,7 +517,7 @@ export default function ManageMatchesPage() {
                           backgroundColor: '#14b8a6',
                           color: '#ffffff',
                           border: 'none',
-                          borderRadius: '6px',
+                          borderRadius: '3px',
                           padding: '12px',
                           cursor: 'pointer',
                           fontSize: '14px',
@@ -511,7 +557,7 @@ export default function ManageMatchesPage() {
                   key={booking.id}
                   style={{
                     backgroundColor: '#9ca3af',
-                    borderRadius: '12px',
+                    borderRadius: '3px',
                     padding: '20px',
                     position: 'relative',
                     color: '#ffffff',
@@ -531,7 +577,7 @@ export default function ManageMatchesPage() {
                       right: '16px',
                       background: 'rgba(255, 255, 255, 0.2)',
                       border: 'none',
-                      borderRadius: '6px',
+                      borderRadius: '3px',
                       padding: '8px',
                       cursor: 'pointer',
                       color: '#ffffff',
@@ -625,11 +671,11 @@ export default function ManageMatchesPage() {
               );
             })}
 
-            {bookings.length === 0 && (
+            {!isLoadingData && bookings.length === 0 && (
               <div style={{
                 textAlign: 'center',
                 padding: '48px',
-                color: '#ffffff',
+                color: clubSettings.fontColor,
                 fontSize: '16px',
                 opacity: 0.8
               }}>
@@ -639,18 +685,22 @@ export default function ManageMatchesPage() {
           </div>
 
           {/* Score Cards section */}
-          <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.2)', paddingTop: '32px' }}>
+          <div style={{ borderTop: `1px solid ${clubSettings.fontColor}33`, paddingTop: '32px' }}>
             <h2 style={{
               fontSize: '24px',
               fontWeight: '600',
-              color: '#ffffff',
+              color: clubSettings.fontColor,
               marginBottom: '24px',
               textAlign: 'center'
             }}>
               Score Cards
             </h2>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="matches-grid" style={{ 
+              display: 'grid', 
+              gridTemplateColumns: '1fr',
+              gap: '16px'
+            }}>
               {matchResults.map(result => {
                 const date = formatDate(result.matchDate);
                 const time = formatTime(result.matchTime);
@@ -663,7 +713,7 @@ export default function ManageMatchesPage() {
                     key={result.id}
                     style={{
                       backgroundColor: '#ffffff',
-                      borderRadius: '12px',
+                      borderRadius: '3px',
                       padding: '20px',
                       position: 'relative',
                       boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
@@ -798,10 +848,10 @@ export default function ManageMatchesPage() {
                         }}
                         style={{
                           width: '100%',
-                          backgroundColor: '#667eea',
+                          backgroundColor: clubSettings.selectedColor,
                           color: '#ffffff',
                           border: 'none',
-                          borderRadius: '6px',
+                          borderRadius: '3px',
                           padding: '12px',
                           cursor: 'pointer',
                           fontSize: '14px',
@@ -816,11 +866,11 @@ export default function ManageMatchesPage() {
                 );
               })}
 
-              {matchResults.length === 0 && (
+              {!isLoadingData && matchResults.length === 0 && (
                 <div style={{
                   textAlign: 'center',
                   padding: '48px',
-                  color: '#ffffff',
+                  color: clubSettings.fontColor,
                   fontSize: '16px',
                   opacity: 0.8
                 }}>
@@ -829,11 +879,21 @@ export default function ManageMatchesPage() {
               )}
             </div>
           </div>
+            </>
+          )}
         </div>
 
-        <ClubFooter fontColor="#ffffff" />
+        <ClubFooter fontColor={clubSettings.fontColor} />
       </div>
     </ProtectedRoute>
+  );
+}
+
+export default function ClubMatchesClient(props: ClubMatchesClientProps) {
+  return (
+    <ClubAnimationProvider>
+      <ClubMatchesContent {...props} />
+    </ClubAnimationProvider>
   );
 }
 

@@ -454,3 +454,635 @@
   text-decoration: underline;
 }
 
+/* Rankings Page Styles */
+.rankingsStartSection {
+  background-color: #052333;
+  width: 100%;
+  padding: 60px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.rankingsProfileContainer {
+  position: relative;
+}
+
+.rankingsProfileCircle {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background-color: #052333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 4px solid #fbbf24;
+}
+
+.rankingsProfileImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rankingsProfileInitials {
+  width: 100%;
+  height: 100%;
+  background-color: #667eea;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.rankingsNumberOverlay {
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: #052333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.rankingsTitleSection {
+  text-align: center;
+}
+
+.rankingsTitle {
+  font-size: 24px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 12px;
+}
+
+.rankingsDescription {
+  font-size: 14px;
+  color: #ffffff;
+  opacity: 0.8;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.rankingsSliderContainer {
+  width: 100%;
+  max-width: 500px;
+  position: relative;
+  margin-top: -10px;
+}
+
+.rankingsSliderTrack {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  pointer-events: none;
+}
+
+.rankingsSliderInputContainer {
+  position: relative;
+  margin-bottom: 32px;
+  margin-top: 0;
+}
+
+.rankingsSliderInput {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: #ffffff;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+}
+
+.rankingsSliderNumberMarkers {
+  display: flex;
+  justify-content: space-between;
+  position: absolute;
+  top: 24px;
+  left: 0;
+  right: 0;
+  font-size: 12px;
+  color: #ffffff;
+  opacity: 0.7;
+  pointer-events: none;
+  padding-top: 8px;
+}
+
+.rankingsSliderLabels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 32px;
+  font-size: 12px;
+  color: #ffffff;
+  opacity: 0.7;
+}
+
+.rankingsSliderLabelItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.rankingsSliderLabelText {
+  font-size: 10px;
+}
+
+.rankingsLockButton {
+  padding: 10px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #052333;
+  background-color: #ffffff !important;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rankingsLockButton:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.rankingsLockButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.rankingsContentContainer {
+  flex: 1;
+  padding: 60px 20px;
+  max-width: 500px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.rankingsCategorySelector {
+  margin-bottom: 20px;
+}
+
+.rankingsCategorySelect {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 16px;
+  border: none;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.5);
+  outline: none;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.rankingsSearchContainer {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.rankingsSearchInput {
+  width: 100%;
+  padding: 12px 16px 12px 44px;
+  font-size: 16px;
+  border: none;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.5);
+  outline: none;
+  box-sizing: border-box;
+  backdrop-filter: blur(10px);
+}
+
+.rankingsSearchIcon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  opacity: 0.7;
+}
+
+.rankingsMembersList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.rankingsEmptyState {
+  text-align: center;
+  padding: 40px 20px;
+  opacity: 0.7;
+}
+
+.rankingsMemberCard {
+  background-color: #ffffff;
+  border-radius: 3px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rankingsMemberCard:hover {
+  background-color: #f9fafb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.rankingsMemberAvatarContainer {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.rankingsMemberAvatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #fbbf24;
+}
+
+.rankingsMemberAvatarPlaceholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background-color: #052333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 20px;
+  border: 3px solid #fbbf24;
+}
+
+.rankingsMemberInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rankingsMemberName {
+  font-size: 16px;
+  font-weight: 500;
+  color: #052333;
+}
+
+.rankingsMemberRoleContainer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rankingsMemberRoleBadge {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.rankingsMemberRatingContainer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rankingsMemberRatingCircle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.rankingsMemberStatusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Range slider styles */
+.rankingsSliderInput::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fbbf24;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  margin-top: -10px;
+}
+
+.rankingsSliderInput::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fbbf24;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.rankingsSliderInput::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+}
+
+.rankingsSliderInput::-moz-range-track {
+  background: transparent;
+  height: 4px;
+}
+
+/* Loading State */
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+}
+
+.loadingText {
+  font-size: 16px;
+  opacity: 0.7;
+}
+
+/* Club Manage Page Styles */
+.manageContainer {
+  min-height: 100vh;
+  background: #052333;
+  color: #ffffff;
+  font-family: 'Poppins', sans-serif;
+}
+
+.manageLoadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 16px;
+}
+
+.manageSpinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.manageErrorContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 16px;
+  padding: 40px;
+  text-align: center;
+}
+
+.manageHeader {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 24px 40px;
+}
+
+.manageHeaderContent {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.manageBackButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 12px;
+}
+
+.manageBackButton:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+.manageClubName {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: #ffffff;
+}
+
+.manageClubSubtitle {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+}
+
+.manageHeaderActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.manageBtnView {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  padding: 10px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.manageBtnView:hover {
+  background: rgba(102, 126, 234, 0.2);
+  border-color: rgba(102, 126, 234, 0.5);
+  color: #818cf8;
+}
+
+.manageBtnPrimary {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.manageBtnPrimary:hover {
+  background: #5568d3;
+}
+
+.manageTabs {
+  display: flex;
+  gap: 0;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.manageTab {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  border: none;
+  padding: 16px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.manageTab:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.manageTabActive {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+.manageMain {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 40px;
+}
+
+.manageTabContent {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  padding: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.manageTabContent h2 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 24px 0;
+  color: #ffffff;
+}
+
+.manageStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.manageStatCard {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 24px;
+  text-align: center;
+}
+
+.manageStatCard h3 {
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: #667eea;
+}
+
+.manageStatCard p {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+}
+
+.manageInfoCard {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 24px;
+}
+
+.manageInfoCard h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 20px 0;
+  color: #ffffff;
+}
+
+.manageInfoRow {
+  display: flex;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.manageInfoRow:last-child {
+  border-bottom: none;
+}
+
+.manageInfoLabel {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 120px;
+}
+
+.manageStatusActive {
+  color: #10b981;
+  font-weight: 500;
+}
+
+.manageStatusInactive {
+  color: #f97316;
+  font-weight: 500;
+}
+

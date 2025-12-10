@@ -67,3 +67,4 @@ COMMIT;
 -- INSERT INTO "Bookings" ("clubId", "userId", "courtNumber", "bookingDate", "startTime", "endTime", "duration", "status")
 -- VALUES ('<club-id>', '<user-id>', 1, '2024-01-01', '11:00', '12:00', 60, 'pending');
 
+

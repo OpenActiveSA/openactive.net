@@ -5,8 +5,9 @@ import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
-import ClubHeader from '../../ClubHeader';
-import ClubFooter from '../../ClubFooter';
+import { ClubAnimationProvider } from '@/components/club/ClubAnimationContext';
+import ClubHeader from '@/components/club/ClubHeader';
+import ClubFooter from '@/components/club/ClubFooter';
 
 interface Club {
   id: string;
@@ -46,7 +47,7 @@ interface Booking {
   players?: Player[];
 }
 
-export default function BookingDetailPage() {
+function BookingDetailContent() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
@@ -916,6 +917,14 @@ export default function BookingDetailPage() {
 
       <ClubFooter fontColor={fontColor} />
     </div>
+  );
+}
+
+export default function BookingDetailPage() {
+  return (
+    <ClubAnimationProvider>
+      <BookingDetailContent />
+    </ClubAnimationProvider>
   );
 }
 

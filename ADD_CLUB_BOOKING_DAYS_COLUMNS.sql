@@ -73,3 +73,4 @@ COMMIT;
 -- AND column_name IN ('membersBookingDays', 'visitorBookingDays', 'coachBookingDays')
 -- ORDER BY column_name;
 
+

@@ -107,3 +107,4 @@ COMMIT;
 -- AND table_name = 'Rankings'
 -- ORDER BY ordinal_position;
 
+

@@ -5,9 +5,10 @@ import { useEffect, useState } from 'react';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
 import { getUserClubRole, type ClubRole } from '@/lib/club-roles';
-import ClubHeader from '../../ClubHeader';
-import ClubFooter from '../../ClubFooter';
-import ClubNotifications from '../../ClubNotifications';
+import { ClubAnimationProvider } from '@/components/club/ClubAnimationContext';
+import ClubHeader from '@/components/club/ClubHeader';
+import ClubFooter from '@/components/club/ClubFooter';
+import ClubNotifications from '@/components/club/ClubNotifications';
 import styles from '@/styles/frontend.module.css';
 
 interface MemberProfile {
@@ -21,7 +22,7 @@ interface MemberProfile {
   isOnline?: boolean;
 }
 
-export default function MemberProfilePage() {
+function MemberProfileContent() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
@@ -532,6 +533,14 @@ export default function MemberProfilePage() {
 
       <ClubFooter fontColor={fontColor} />
     </div>
+  );
+}
+
+export default function MemberProfilePage() {
+  return (
+    <ClubAnimationProvider>
+      <MemberProfileContent />
+    </ClubAnimationProvider>
   );
 }
 

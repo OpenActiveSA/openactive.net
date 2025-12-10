@@ -16,7 +16,7 @@ import {
   type Court,
   type SportType
 } from '@/lib/courts';
-import styles from './ClubManage.module.css';
+import styles from '@/styles/frontend.module.css';
 
 interface ClubManageProps {
   params: Promise<{ slug: string }>;
@@ -213,9 +213,9 @@ export default function ClubManagePage({ params }: ClubManageProps) {
 
   if (authLoading || isLoading) {
     return (
-      <div className={styles.container}>
-        <div className={styles.loadingContainer}>
-          <div className={styles.spinner}></div>
+      <div className={styles.manageContainer}>
+        <div className={styles.manageLoadingContainer}>
+          <div className={styles.manageSpinner}></div>
           <p>Loading...</p>
         </div>
       </div>
@@ -224,11 +224,11 @@ export default function ClubManagePage({ params }: ClubManageProps) {
 
   if (error || !club) {
     return (
-      <div className={styles.container}>
-        <div className={styles.errorContainer}>
+      <div className={styles.manageContainer}>
+        <div className={styles.manageErrorContainer}>
           <h1>Error</h1>
           <p>{error || 'Club not found'}</p>
-          <button onClick={() => router.push('/admin')} className={styles.btnPrimary}>
+          <button onClick={() => router.push('/admin')} className={styles.manageBtnPrimary}>
             Back to Admin
           </button>
         </div>
@@ -237,27 +237,27 @@ export default function ClubManagePage({ params }: ClubManageProps) {
   }
 
   return (
-    <div className={styles.container}>
+    <div className={styles.manageContainer}>
       {/* Header */}
-      <header className={styles.header}>
-        <div className={styles.headerContent}>
+      <header className={styles.manageHeader}>
+        <div className={styles.manageHeaderContent}>
           <div>
             <button 
               onClick={() => router.push('/admin')}
-              className={styles.backButton}
+              className={styles.manageBackButton}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
               </svg>
               Back to Admin
             </button>
-            <h1 className={styles.clubName}>{club.name}</h1>
-            <p className={styles.clubSubtitle}>Club Management</p>
+            <h1 className={styles.manageClubName}>{club.name}</h1>
+            <p className={styles.manageClubSubtitle}>Club Management</p>
           </div>
-          <div className={styles.headerActions}>
+          <div className={styles.manageHeaderActions}>
             <Link 
               href={`/club/${slug}`}
-              className={styles.btnView}
+              className={styles.manageBtnView}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -272,27 +272,27 @@ export default function ClubManagePage({ params }: ClubManageProps) {
       </header>
 
       {/* Navigation Tabs */}
-      <nav className={styles.tabs}>
+      <nav className={styles.manageTabs}>
         <button
-          className={`${styles.tab} ${activeTab === 'overview' ? styles.tabActive : ''}`}
+          className={`${styles.manageTab} ${activeTab === 'overview' ? styles.manageTabActive : ''}`}
           onClick={() => setActiveTab('overview')}
         >
           Overview
         </button>
         <button
-          className={`${styles.tab} ${activeTab === 'settings' ? styles.tabActive : ''}`}
+          className={`${styles.manageTab} ${activeTab === 'settings' ? styles.manageTabActive : ''}`}
           onClick={() => setActiveTab('settings')}
         >
           Settings
         </button>
         <button
-          className={`${styles.tab} ${activeTab === 'members' ? styles.tabActive : ''}`}
+          className={`${styles.manageTab} ${activeTab === 'members' ? styles.manageTabActive : ''}`}
           onClick={() => setActiveTab('members')}
         >
           Members
         </button>
         <button
-          className={`${styles.tab} ${activeTab === 'courts' ? styles.tabActive : ''}`}
+          className={`${styles.manageTab} ${activeTab === 'courts' ? styles.manageTabActive : ''}`}
           onClick={() => setActiveTab('courts')}
         >
           Courts
@@ -300,39 +300,39 @@ export default function ClubManagePage({ params }: ClubManageProps) {
       </nav>
 
       {/* Content */}
-      <main className={styles.main}>
+      <main className={styles.manageMain}>
         {activeTab === 'overview' && (
-          <div className={styles.tabContent}>
+          <div className={styles.manageTabContent}>
             <h2>Overview</h2>
-            <div className={styles.statsGrid}>
-              <div className={styles.statCard}>
+            <div className={styles.manageStatsGrid}>
+              <div className={styles.manageStatCard}>
                 <h3>{club.numberOfCourts || 0}</h3>
                 <p>Courts</p>
               </div>
-              <div className={styles.statCard}>
+              <div className={styles.manageStatCard}>
                 <h3>0</h3>
                 <p>Members</p>
               </div>
-              <div className={styles.statCard}>
+              <div className={styles.manageStatCard}>
                 <h3>0</h3>
                 <p>Bookings</p>
               </div>
             </div>
-            <div className={styles.infoCard}>
+            <div className={styles.manageInfoCard}>
               <h3>Club Information</h3>
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Name:</span>
+              <div className={styles.manageInfoRow}>
+                <span className={styles.manageInfoLabel}>Name:</span>
                 <span>{club.name}</span>
               </div>
               {(club.country || club.province) && (
-                <div className={styles.infoRow}>
-                  <span className={styles.infoLabel}>Location:</span>
+                <div className={styles.manageInfoRow}>
+                  <span className={styles.manageInfoLabel}>Location:</span>
                   <span>{[club.province, club.country].filter(Boolean).join(', ')}</span>
                 </div>
               )}
-              <div className={styles.infoRow}>
-                <span className={styles.infoLabel}>Status:</span>
-                <span className={club.is_active ? styles.statusActive : styles.statusInactive}>
+              <div className={styles.manageInfoRow}>
+                <span className={styles.manageInfoLabel}>Status:</span>
+                <span className={club.is_active ? styles.manageStatusActive : styles.manageStatusInactive}>
                   {club.is_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
@@ -341,21 +341,21 @@ export default function ClubManagePage({ params }: ClubManageProps) {
         )}
 
         {activeTab === 'settings' && (
-          <div className={styles.tabContent}>
+          <div className={styles.manageTabContent}>
             <h2>Settings</h2>
             <p>Club settings coming soon...</p>
           </div>
         )}
 
         {activeTab === 'members' && (
-          <div className={styles.tabContent}>
+          <div className={styles.manageTabContent}>
             <h2>Members</h2>
             <p>Member management coming soon...</p>
           </div>
         )}
 
         {activeTab === 'courts' && (
-          <div className={styles.tabContent}>
+          <div className={styles.manageTabContent}>
             <h2>Courts</h2>
             <p>Court management coming soon...</p>
           </div>

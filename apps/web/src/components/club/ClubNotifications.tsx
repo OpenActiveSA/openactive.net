@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
+import { useClubAnimation } from './ClubAnimationContext';
 
 type RankingCategory = 'SINGLES_MENS' | 'SINGLES_LADIES' | 'DOUBLES_MENS' | 'DOUBLES_LADIES' | 'MIXED';
 
@@ -38,6 +39,8 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [currentNotificationIndex, setCurrentNotificationIndex] = useState<number>(0);
   const { user } = useAuth();
+  // Always call the hook - it returns safe defaults if context is not available
+  const { notificationsVisible, setContentVisible } = useClubAnimation();
 
   useEffect(() => {
     const loadNotifications = async () => {
@@ -90,6 +93,23 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
     }
   }, [clubId, user?.id]);
 
+  // If no notifications, trigger content visibility after header animation
+  useEffect(() => {
+    if (notifications.length === 0) {
+      // Small delay to ensure header has animated
+      const timer = setTimeout(() => setContentVisible(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [notifications.length, setContentVisible]);
+  
+  // When notifications finish animating in, trigger content visibility
+  useEffect(() => {
+    if (notifications.length > 0 && notificationsVisible) {
+      const timer = setTimeout(() => setContentVisible(true), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [notifications.length, notificationsVisible, setContentVisible]);
+
   if (notifications.length === 0) {
     return null;
   }
@@ -106,7 +126,12 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: '16px',
-      position: 'relative'
+      position: 'relative',
+      transform: notificationsVisible ? 'translateY(0)' : 'translateY(-100%)',
+      opacity: notificationsVisible ? 1 : 0,
+      maxHeight: notificationsVisible ? '100px' : '0',
+      overflow: 'hidden',
+      transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
     }}>
       {/* Left arrow */}
       {notifications.length > 1 && (
@@ -192,5 +217,4 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
     </div>
   );
 }
-
 

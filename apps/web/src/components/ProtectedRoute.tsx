@@ -14,22 +14,9 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
-  if (loading) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#052333',
-        color: '#fff'
-      }}>
-        <div>Loading...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
+  // Render children immediately to avoid loading overlay flash
+  // Auth check happens in background and redirects if needed
+  if (!loading && !user) {
     return null; // Will redirect
   }
 

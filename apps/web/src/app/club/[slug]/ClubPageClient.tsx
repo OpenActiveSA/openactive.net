@@ -5,9 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { getClubCourts, SPORT_TYPE_LABELS, type Court } from '@/lib/courts';
-import ClubHeader from './ClubHeader';
-import ClubFooter from './ClubFooter';
-import ClubNotifications from './ClubNotifications';
+import { ClubAnimationProvider, useClubAnimation } from '@/components/club/ClubAnimationContext';
+import ClubHeader from '@/components/club/ClubHeader';
+import ClubFooter from '@/components/club/ClubFooter';
+import ClubNotifications from '@/components/club/ClubNotifications';
 import styles from '@/styles/frontend.module.css';
 
 interface Club {
@@ -33,10 +34,11 @@ interface ClubPageClientProps {
   sessionDuration: number[];
 }
 
-export default function ClubPageClient({ club, slug, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration }: ClubPageClientProps) {
+function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration }: ClubPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
+  const { contentVisible } = useClubAnimation();
   const displayName = club?.name || slug.replace(/([A-Z])/g, ' $1').trim();
   
   // Ensure sessionDuration always has a default value
@@ -462,6 +464,9 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
           flex: 1,
           '--hover-color': hoverColor,
           '--selected-color': selectedColor,
+          opacity: contentVisible ? 1 : 0,
+          transform: contentVisible ? 'translateY(0)' : 'translateY(20px)',
+          transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
         } as React.CSSProperties & { '--hover-color': string; '--selected-color': string }}
       >
 
@@ -917,5 +922,13 @@ export default function ClubPageClient({ club, slug, logo, backgroundColor, font
       </div>
       <ClubFooter fontColor={fontColor} />
     </div>
+  );
+}
+
+export default function ClubPageClient(props: ClubPageClientProps) {
+  return (
+    <ClubAnimationProvider>
+      <ClubPageContent {...props} />
+    </ClubAnimationProvider>
   );
 }

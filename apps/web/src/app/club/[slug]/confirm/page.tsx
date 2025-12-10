@@ -6,8 +6,9 @@ import { useRouter } from 'next/navigation';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
 import { useAuth } from '@/lib/auth-context';
-import ClubHeader from '../ClubHeader';
-import ClubFooter from '../ClubFooter';
+import { ClubAnimationProvider } from '@/components/club/ClubAnimationContext';
+import ClubHeader from '@/components/club/ClubHeader';
+import ClubFooter from '@/components/club/ClubFooter';
 import styles from '@/styles/frontend.module.css';
 
 interface Club {
@@ -27,7 +28,7 @@ interface Player {
   isGuest?: boolean;
 }
 
-export default function ConfirmBookingPage() {
+function ConfirmBookingContent() {
   const params = useParams();
   const slug = params.slug as string;
   const searchParams = useSearchParams();
@@ -304,7 +305,7 @@ export default function ConfirmBookingPage() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
-      <ClubHeader logo={logo} fontColor={fontColor} backgroundColor={backgroundColor} selectedColor={selectedColor} />
+      <ClubHeader logo={logo} fontColor={fontColor} backgroundColor={backgroundColor} selectedColor={selectedColor} currentPath={`/club/${slug}/confirm`} />
       
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '32px 24px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: '600', marginBottom: '32px', color: '#052333', textAlign: 'center' }}>
@@ -474,6 +475,14 @@ export default function ConfirmBookingPage() {
 
       <ClubFooter fontColor={fontColor} />
     </div>
+  );
+}
+
+export default function ConfirmBookingPage() {
+  return (
+    <ClubAnimationProvider>
+      <ConfirmBookingContent />
+    </ClubAnimationProvider>
   );
 }
 

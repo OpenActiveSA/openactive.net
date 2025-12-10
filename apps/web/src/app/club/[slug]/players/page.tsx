@@ -6,8 +6,9 @@ import { useRouter } from 'next/navigation';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
 import { useAuth } from '@/lib/auth-context';
-import ClubHeader from '../ClubHeader';
-import ClubFooter from '../ClubFooter';
+import { ClubAnimationProvider } from '@/components/club/ClubAnimationContext';
+import ClubHeader from '@/components/club/ClubHeader';
+import ClubFooter from '@/components/club/ClubFooter';
 import styles from '@/styles/frontend.module.css';
 
 interface Club {
@@ -20,7 +21,7 @@ interface Club {
   hoverColor?: string;
 }
 
-export default function PlayerSelectionPage() {
+function PlayerSelectionContent() {
   const params = useParams();
   const slug = params.slug as string;
   const searchParams = useSearchParams();
@@ -1154,6 +1155,14 @@ export default function PlayerSelectionPage() {
       </div>
       <ClubFooter fontColor={fontColor} />
     </div>
+  );
+}
+
+export default function PlayerSelectionPage() {
+  return (
+    <ClubAnimationProvider>
+      <PlayerSelectionContent />
+    </ClubAnimationProvider>
   );
 }
 
