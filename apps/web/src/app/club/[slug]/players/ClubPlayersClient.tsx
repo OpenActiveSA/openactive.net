@@ -25,11 +25,11 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
   
   // Player selection state
   const [bookingType, setBookingType] = useState<'singles' | 'doubles' | 'coaching'>('singles');
-  const [selectedPlayers, setSelectedPlayers] = useState<Array<{ id: string; name: string; email: string } | null>>([null, null, null, null]);
+  const [selectedPlayers, setSelectedPlayers] = useState<Array<{ id: string; name: string; email: string; avatarUrl?: string | null } | null>>([null, null, null, null]);
   const [playerSearchTerm, setPlayerSearchTerm] = useState<string>('');
   const [showPlayerDropdown, setShowPlayerDropdown] = useState<number | null>(null);
-  const [availablePlayers, setAvailablePlayers] = useState<Array<{ id: string; name: string; email: string }>>([]);
-  const [coaches, setCoaches] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [availablePlayers, setAvailablePlayers] = useState<Array<{ id: string; name: string; email: string; avatarUrl?: string | null }>>([]);
+  const [coaches, setCoaches] = useState<Array<{ id: string; name: string; email: string; avatarUrl?: string | null }>>([]);
   const [isLoadingPlayers, setIsLoadingPlayers] = useState(true);
   
   // Get booking details from URL params
@@ -71,7 +71,7 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
       const supabase = getSupabaseClientClient();
       supabase
         .from('Users')
-        .select('id, Firstname, Surname, email')
+        .select('id, Firstname, Surname, email, avatarUrl')
         .eq('id', user.id)
         .maybeSingle()
         .then(({ data }) => {
@@ -79,7 +79,7 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
             const name = data.Firstname && data.Surname 
               ? `${data.Firstname} ${data.Surname}`
               : data.Firstname || data.Surname || data.email?.split('@')[0] || 'User';
-            setSelectedPlayers([{ id: data.id, name, email: data.email || '' }, null, null, null]);
+            setSelectedPlayers([{ id: data.id, name, email: data.email || '', avatarUrl: data.avatarUrl || null }, null, null, null]);
           }
         });
     }
@@ -94,7 +94,7 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
         const supabase = getSupabaseClientClient();
         const { data } = await supabase
           .from('Users')
-          .select('id, Firstname, Surname, email')
+          .select('id, Firstname, Surname, email, avatarUrl')
           .order('Firstname', { ascending: true })
           .limit(100);
         
@@ -104,7 +104,8 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
             name: u.Firstname && u.Surname 
               ? `${u.Firstname} ${u.Surname}`
               : u.Firstname || u.Surname || u.email?.split('@')[0] || 'User',
-            email: u.email || ''
+            email: u.email || '',
+            avatarUrl: u.avatarUrl || null
           }));
           setAvailablePlayers(players);
           // For now, all users can be coaches. Later you can filter by role if needed
@@ -132,7 +133,7 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
       .slice(0, 10);
   }, [availablePlayers, playerSearchTerm]);
   
-  const handleSelectPlayer = (playerIndex: number, player: { id: string; name: string; email: string } | null) => {
+  const handleSelectPlayer = (playerIndex: number, player: { id: string; name: string; email: string; avatarUrl?: string | null } | null) => {
     const newPlayers = [...selectedPlayers];
     newPlayers[playerIndex] = player;
     setSelectedPlayers(newPlayers);
@@ -278,9 +279,30 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
                   >
                     <div 
                       className={`${styles.playerAvatar} ${selectedPlayers[0] ? styles.playerAvatarSelected : ''}`}
-                      style={selectedPlayers[0] ? { backgroundColor: clubSettings.selectedColor } : {}}
+                      style={selectedPlayers[0] && !selectedPlayers[0].avatarUrl ? { backgroundColor: clubSettings.selectedColor } : {}}
                     >
-                      {selectedPlayers[0] ? selectedPlayers[0].name.charAt(0).toUpperCase() : '?'}
+                      {selectedPlayers[0]?.avatarUrl ? (
+                        <img 
+                          src={selectedPlayers[0].avatarUrl} 
+                          alt={selectedPlayers[0].name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: '50%',
+                            objectFit: 'cover'
+                          }}
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML = `<span style="color: ${selectedPlayers[0] ? '#ffffff' : '#052333'}; font-weight: 600; font-size: 16px;">${selectedPlayers[0]?.name.charAt(0).toUpperCase() || '?'}</span>`;
+                            }
+                          }}
+                        />
+                      ) : (
+                        selectedPlayers[0] ? selectedPlayers[0].name.charAt(0).toUpperCase() : '?'
+                      )}
                     </div>
                     <div className={styles.playerFieldContent}>
                       {selectedPlayers[0] ? (
@@ -354,9 +376,30 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
                   >
                     <div 
                       className={`${styles.playerAvatar} ${selectedPlayers[1] ? styles.playerAvatarSelected : ''}`}
-                      style={selectedPlayers[1] ? { backgroundColor: clubSettings.selectedColor } : {}}
+                      style={selectedPlayers[1] && !selectedPlayers[1].avatarUrl ? { backgroundColor: clubSettings.selectedColor } : {}}
                     >
-                      {selectedPlayers[1] ? (selectedPlayers[1].id === 'guest' ? 'G' : selectedPlayers[1].name.charAt(0).toUpperCase()) : '?'}
+                      {selectedPlayers[1]?.avatarUrl ? (
+                        <img 
+                          src={selectedPlayers[1].avatarUrl} 
+                          alt={selectedPlayers[1].name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: '50%',
+                            objectFit: 'cover'
+                          }}
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML = `<span style="color: ${selectedPlayers[1] ? '#ffffff' : '#052333'}; font-weight: 600; font-size: 16px;">${selectedPlayers[1]?.id === 'guest' ? 'G' : selectedPlayers[1]?.name.charAt(0).toUpperCase() || '?'}</span>`;
+                            }
+                          }}
+                        />
+                      ) : (
+                        selectedPlayers[1] ? (selectedPlayers[1].id === 'guest' ? 'G' : selectedPlayers[1].name.charAt(0).toUpperCase()) : '?'
+                      )}
                     </div>
                     <div className={styles.playerFieldContent}>
                       {selectedPlayers[1] ? (
@@ -435,9 +478,30 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
                       >
                         <div 
                           className={`${styles.playerAvatar} ${selectedPlayers[index] ? styles.playerAvatarSelected : ''}`}
-                          style={selectedPlayers[index] ? { backgroundColor: clubSettings.selectedColor } : {}}
+                          style={selectedPlayers[index] && !selectedPlayers[index]?.avatarUrl ? { backgroundColor: clubSettings.selectedColor } : {}}
                         >
-                          {selectedPlayers[index] ? (selectedPlayers[index].id === 'guest' ? 'G' : selectedPlayers[index].name.charAt(0).toUpperCase()) : '?'}
+                          {selectedPlayers[index]?.avatarUrl ? (
+                            <img 
+                              src={selectedPlayers[index].avatarUrl} 
+                              alt={selectedPlayers[index].name}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                borderRadius: '50%',
+                                objectFit: 'cover'
+                              }}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  parent.innerHTML = `<span style="color: ${selectedPlayers[index] ? '#ffffff' : '#052333'}; font-weight: 600; font-size: 16px;">${selectedPlayers[index]?.id === 'guest' ? 'G' : selectedPlayers[index]?.name.charAt(0).toUpperCase() || '?'}</span>`;
+                                }
+                              }}
+                            />
+                          ) : (
+                            selectedPlayers[index] ? (selectedPlayers[index].id === 'guest' ? 'G' : selectedPlayers[index].name.charAt(0).toUpperCase()) : '?'
+                          )}
                         </div>
                         <div className={styles.playerFieldContent}>
                           {selectedPlayers[index] ? (
@@ -517,9 +581,30 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
                   >
                     <div 
                       className={`${styles.playerAvatar} ${selectedPlayers[0] ? styles.playerAvatarSelected : ''}`}
-                      style={selectedPlayers[0] ? { backgroundColor: clubSettings.selectedColor } : {}}
+                      style={selectedPlayers[0] && !selectedPlayers[0].avatarUrl ? { backgroundColor: clubSettings.selectedColor } : {}}
                     >
-                      {selectedPlayers[0] ? selectedPlayers[0].name.charAt(0).toUpperCase() : '?'}
+                      {selectedPlayers[0]?.avatarUrl ? (
+                        <img 
+                          src={selectedPlayers[0].avatarUrl} 
+                          alt={selectedPlayers[0].name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: '50%',
+                            objectFit: 'cover'
+                          }}
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML = `<span style="color: ${selectedPlayers[0] ? '#ffffff' : '#052333'}; font-weight: 600; font-size: 16px;">${selectedPlayers[0]?.name.charAt(0).toUpperCase() || '?'}</span>`;
+                            }
+                          }}
+                        />
+                      ) : (
+                        selectedPlayers[0] ? selectedPlayers[0].name.charAt(0).toUpperCase() : '?'
+                      )}
                     </div>
                     <div className={styles.playerFieldContent}>
                       {selectedPlayers[0] ? (
@@ -581,7 +666,28 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
                     {selectedPlayers[1] ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div className={styles.coachListAvatar}>
-                          {selectedPlayers[1].name.charAt(0).toUpperCase()}
+                          {selectedPlayers[1].avatarUrl ? (
+                            <img 
+                              src={selectedPlayers[1].avatarUrl} 
+                              alt={selectedPlayers[1].name}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                borderRadius: '50%',
+                                objectFit: 'cover'
+                              }}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  parent.innerHTML = `<span style="color: #ffffff; font-weight: 600; font-size: 16px;">${selectedPlayers[1]?.name.charAt(0).toUpperCase() || '?'}</span>`;
+                                }
+                              }}
+                            />
+                          ) : (
+                            selectedPlayers[1].name.charAt(0).toUpperCase()
+                          )}
                         </div>
                         <div className={styles.coachListInfo}>
                           <div className={styles.coachListName}>
@@ -607,7 +713,28 @@ function ClubPlayersContent({ slug, clubSettings }: ClubPlayersClientProps) {
                             className={styles.coachListItem}
                           >
                             <div className={styles.coachListAvatar}>
-                              {coach.name.charAt(0).toUpperCase()}
+                              {coach.avatarUrl ? (
+                                <img 
+                                  src={coach.avatarUrl} 
+                                  alt={coach.name}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    borderRadius: '50%',
+                                    objectFit: 'cover'
+                                  }}
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    const parent = target.parentElement;
+                                    if (parent) {
+                                      parent.innerHTML = `<span style="color: #ffffff; font-weight: 600; font-size: 16px;">${coach.name.charAt(0).toUpperCase()}</span>`;
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                coach.name.charAt(0).toUpperCase()
+                              )}
                             </div>
                             <div className={styles.coachListInfo}>
                               <div className={styles.coachListName}>

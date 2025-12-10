@@ -1394,3 +1394,158 @@
   opacity: 0.9;
 }
 
+/* Confirm Page Styles */
+.confirmPageContainer {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.confirmPageTitle {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.pricingSummaryCard {
+  background-color: #e3f2fd;
+  border-radius: 3px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(5, 35, 51, 0.1);
+}
+
+.pricingRateType {
+  font-size: 14px;
+  font-weight: 500;
+  color: #052333;
+  margin-bottom: 12px;
+}
+
+.pricingItem {
+  font-size: 14px;
+  color: #052333;
+  margin-bottom: 8px;
+}
+
+.pricingTotal {
+  font-size: 18px;
+  font-weight: 600;
+  color: #052333;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(5, 35, 51, 0.2);
+}
+
+.bookingDetailsCard {
+  background-color: #ffffff;
+  border-radius: 3px;
+  padding: 24px;
+  margin-bottom: 32px;
+}
+
+.bookingDetailItem {
+  font-size: 16px;
+  font-weight: 500;
+  color: #052333;
+  margin-bottom: 12px;
+}
+
+.bookingDetailItemLast {
+  font-size: 16px;
+  font-weight: 500;
+  color: #052333;
+  margin-bottom: 24px;
+}
+
+.playersContainer {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.playerItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.playerAvatarConfirm {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #052333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.playerAvatarGuest {
+  border: 2px solid #fbbf24;
+}
+
+.playerNameConfirm {
+  font-size: 12px;
+  color: #052333;
+  text-align: center;
+  max-width: 60px;
+}
+
+.playerGuestLabel {
+  font-size: 10px;
+  color: #666;
+  text-align: center;
+}
+
+.errorMessage {
+  background-color: #fee2e2;
+  color: #dc2626;
+  padding: 12px 16px;
+  border-radius: 3px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.confirmButtonsContainer {
+  display: flex;
+  gap: 12px;
+}
+
+.confirmButton {
+  flex: 1;
+  padding: 14px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.confirmButtonBack {
+  background-color: #ffffff;
+  color: #052333;
+}
+
+.confirmButtonBack:hover {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.confirmButtonSubmit {
+  color: #ffffff;
+}
+
+.confirmButtonSubmit:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.confirmButtonSubmit:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
