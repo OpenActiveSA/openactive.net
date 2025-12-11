@@ -282,27 +282,27 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
     switch (role) {
       case 'MEMBER':
         return {
-          backgroundColor: '#fbbf24', // Gold
+          backgroundColor: '#cda746', // OpenActive Gold
           color: '#052333'
         };
       case 'VISITOR':
         return {
-          backgroundColor: '#052333', // Dark blue
+          backgroundColor: '#000000', // Black
           color: '#ffffff'
         };
       case 'COACH':
         return {
-          backgroundColor: '#fbbf24', // Gold
+          backgroundColor: '#cda746', // OpenActive Gold
           color: '#052333'
         };
       case 'CLUB_ADMIN':
         return {
-          backgroundColor: '#fbbf24', // Gold
+          backgroundColor: '#cda746', // OpenActive Gold
           color: '#052333'
         };
       default:
         return {
-          backgroundColor: '#fbbf24',
+          backgroundColor: '#cda746', // OpenActive Gold
           color: '#052333'
         };
     }
@@ -313,7 +313,7 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
     // Alternate between gold and gray, or use gold for ratings >= 7.5
     const useGold = rating >= 7.5 || index % 3 === 0;
     return {
-      backgroundColor: useGold ? '#fbbf24' : '#e5e7eb',
+      backgroundColor: useGold ? '#cda746' : '#e5e7eb', // OpenActive Gold
       color: useGold ? '#052333' : '#6b7280'
     };
   };

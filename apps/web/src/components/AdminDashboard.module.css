@@ -437,8 +437,8 @@
 }
 
 .roleAdmin {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--openactive-gold, #cda746);
+  color: #052333;
 }
 
 .roleManager {
@@ -447,13 +447,13 @@
 }
 
 .roleMember {
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--openactive-gold, #cda746);
+  color: #052333;
 }
 
 .roleVisitor {
-  background: #f3f4f6;
-  color: #374151;
+  background: #000000;
+  color: #ffffff;
 }
 
 /* Clubs Grid */

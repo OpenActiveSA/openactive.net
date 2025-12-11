@@ -129,7 +129,7 @@ function MemberProfileContent({ slug, userId, clubSettings }: MemberProfileClien
   const getRoleLabel = (role: ClubRole): string => {
     switch (role) {
       case 'MEMBER':
-        return 'Player';
+        return 'Member';
       case 'VISITOR':
         return 'Guest';
       case 'COACH':
@@ -137,7 +137,7 @@ function MemberProfileContent({ slug, userId, clubSettings }: MemberProfileClien
       case 'CLUB_ADMIN':
         return 'Club Manager';
       default:
-        return 'Player';
+        return 'Member';
     }
   };
 
@@ -299,7 +299,7 @@ function MemberProfileContent({ slug, userId, clubSettings }: MemberProfileClien
                 height: '120px',
                 borderRadius: '50%',
                 backgroundColor: clubSettings.backgroundColor,
-                border: `4px solid ${clubSettings.selectedColor}`,
+                border: `4px solid ${member.role === 'VISITOR' ? '#000000' : (member.role === 'MEMBER' ? '#cda746' : clubSettings.selectedColor)}`,
                 margin: '0 auto',
                 display: 'flex',
                 alignItems: 'center',
@@ -375,7 +375,7 @@ function MemberProfileContent({ slug, userId, clubSettings }: MemberProfileClien
           }}>
             <div style={{
               display: 'inline-block',
-              backgroundColor: clubSettings.selectedColor,
+              backgroundColor: member.role === 'VISITOR' ? '#000000' : (member.role === 'MEMBER' ? '#cda746' : clubSettings.selectedColor),
               color: '#ffffff',
               padding: '8px 20px',
               borderRadius: '20px',

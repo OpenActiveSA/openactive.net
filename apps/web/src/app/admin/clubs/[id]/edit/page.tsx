@@ -39,6 +39,21 @@ interface Club {
   fontColor?: string;
   hoverColor?: string;
   createdAt?: string;
+  // Module settings
+  moduleCourtBooking?: boolean;
+  moduleMemberManager?: boolean;
+  moduleWebsite?: boolean;
+  moduleEmailers?: boolean;
+  moduleVisitorPayment?: boolean;
+  moduleFloodlightPayment?: boolean;
+  moduleEvents?: boolean;
+  moduleCoaching?: boolean;
+  moduleLeague?: boolean;
+  moduleRankings?: boolean;
+  moduleMarketing?: boolean;
+  moduleAccessControl?: boolean;
+  moduleClubWallet?: boolean;
+  moduleFinanceIntegration?: boolean;
 }
 
 // List of countries for the dropdown
@@ -94,6 +109,24 @@ export default function EditClubPage({ params }: EditClubProps) {
   const [isUploadingBackground, setIsUploadingBackground] = useState(false);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
   const backgroundImageFileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Module settings state
+  const [moduleSettings, setModuleSettings] = useState({
+    moduleCourtBooking: true,
+    moduleMemberManager: false,
+    moduleWebsite: true,
+    moduleEmailers: true,
+    moduleVisitorPayment: true,
+    moduleFloodlightPayment: true,
+    moduleEvents: true,
+    moduleCoaching: true,
+    moduleLeague: true,
+    moduleRankings: true,
+    moduleMarketing: true,
+    moduleAccessControl: true,
+    moduleClubWallet: true,
+    moduleFinanceIntegration: true,
+  });
   
   // Court management state
   const [courts, setCourts] = useState<Court[]>([]);
@@ -731,6 +764,22 @@ export default function EditClubPage({ params }: EditClubProps) {
       } catch (err) {
         console.warn('Branding columns may not exist, updating without them');
       }
+
+      // Add module settings
+      updateData.moduleCourtBooking = moduleSettings.moduleCourtBooking;
+      updateData.moduleMemberManager = moduleSettings.moduleMemberManager;
+      updateData.moduleWebsite = moduleSettings.moduleWebsite;
+      updateData.moduleEmailers = moduleSettings.moduleEmailers;
+      updateData.moduleVisitorPayment = moduleSettings.moduleVisitorPayment;
+      updateData.moduleFloodlightPayment = moduleSettings.moduleFloodlightPayment;
+      updateData.moduleEvents = moduleSettings.moduleEvents;
+      updateData.moduleCoaching = moduleSettings.moduleCoaching;
+      updateData.moduleLeague = moduleSettings.moduleLeague;
+      updateData.moduleRankings = moduleSettings.moduleRankings;
+      updateData.moduleMarketing = moduleSettings.moduleMarketing;
+      updateData.moduleAccessControl = moduleSettings.moduleAccessControl;
+      updateData.moduleClubWallet = moduleSettings.moduleClubWallet;
+      updateData.moduleFinanceIntegration = moduleSettings.moduleFinanceIntegration;
 
       // Use API route to update (bypasses RLS using service role)
       const response = await fetch(`/api/admin/clubs/${id}/update`, {
@@ -1760,6 +1809,78 @@ export default function EditClubPage({ params }: EditClubProps) {
                       style={{ flex: 1 }}
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Module Settings Section */}
+              <div style={{ marginTop: '48px', paddingTop: '32px', borderTop: '2px solid rgba(255, 255, 255, 0.1)' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px', color: '#ffffff' }}>Module Settings</h2>
+                <p style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.6)', marginBottom: '24px' }}>
+                  Enable or disable features for this club
+                </p>
+                
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
+                  gap: '16px' 
+                }}>
+                  {[
+                    { key: 'moduleCourtBooking', label: 'Court Booking' },
+                    { key: 'moduleMemberManager', label: 'Member Manager' },
+                    { key: 'moduleWebsite', label: 'Website' },
+                    { key: 'moduleEmailers', label: 'Emailers' },
+                    { key: 'moduleVisitorPayment', label: 'Visitor Payment' },
+                    { key: 'moduleFloodlightPayment', label: 'Floodlight Payment' },
+                    { key: 'moduleEvents', label: 'Events' },
+                    { key: 'moduleCoaching', label: 'Coaching' },
+                    { key: 'moduleLeague', label: 'League' },
+                    { key: 'moduleRankings', label: 'Rankings' },
+                    { key: 'moduleMarketing', label: 'Marketing' },
+                    { key: 'moduleAccessControl', label: 'Access Control' },
+                    { key: 'moduleClubWallet', label: 'Club Wallet' },
+                    { key: 'moduleFinanceIntegration', label: 'Finance Integration' },
+                  ].map((module) => (
+                    <label
+                      key={module.key}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={moduleSettings[module.key as keyof typeof moduleSettings]}
+                        onChange={(e) => {
+                          setModuleSettings({
+                            ...moduleSettings,
+                            [module.key]: e.target.checked
+                          });
+                        }}
+                        disabled={isSubmitting}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <span style={{ color: '#ffffff', fontSize: '14px', fontWeight: 500 }}>
+                        {module.label}
+                      </span>
+                    </label>
+                  ))}
                 </div>
               </div>
 

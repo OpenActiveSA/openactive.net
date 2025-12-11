@@ -56,7 +56,20 @@ export async function setUserClubRole(
   clubId: string,
   role: ClubRole
 ): Promise<{ success: boolean; error?: string }> {
+  console.log('[setUserClubRole] Function entry point reached');
+  console.log('[setUserClubRole] Called with:', { userId, clubId, role, hasSupabase: !!supabase });
+  
   try {
+    // Validate inputs
+    if (!supabase) {
+      console.error('[setUserClubRole] No supabase client provided');
+      return { success: false, error: 'Supabase client is required' };
+    }
+    if (!userId || !clubId || !role) {
+      console.error('[setUserClubRole] Missing parameters:', { userId, clubId, role });
+      return { success: false, error: 'Missing required parameters' };
+    }
+
     // If setting to VISITOR, we can delete the record (optional - can keep it)
     if (role === 'VISITOR') {
       const { error: deleteError } = await supabase
@@ -72,6 +85,7 @@ export async function setUserClubRole(
     }
 
     // Upsert the role (insert or update)
+    console.log('[setUserClubRole] Attempting upsert...');
     const { error: upsertError } = await supabase
       .from('UserClubRoles')
       .upsert(
@@ -87,11 +101,15 @@ export async function setUserClubRole(
       );
 
     if (upsertError) {
+      console.error('[setUserClubRole] Upsert error:', upsertError);
       return { success: false, error: upsertError.message };
     }
 
+    console.log('[setUserClubRole] Success');
     return { success: true };
   } catch (err: any) {
+    console.error('[setUserClubRole] Exception caught:', err);
+    console.error('[setUserClubRole] Error stack:', err.stack);
     return { success: false, error: err.message || 'Unknown error' };
   }
 }

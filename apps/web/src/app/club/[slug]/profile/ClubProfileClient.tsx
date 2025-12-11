@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ClubAnimationProvider, useClubAnimation } from '@/components/club/ClubAnimationContext';
+import { getUserClubRole, type ClubRole } from '@/lib/club-roles';
 import ClubHeader from '@/components/club/ClubHeader';
 import ClubFooter from '@/components/club/ClubFooter';
 import OpenActiveLoader from '@/components/OpenActiveLoader';
@@ -30,6 +31,7 @@ function ClubProfileContent({ slug, clubSettings }: ClubProfileClientProps) {
   const { contentVisible } = useClubAnimation();
   
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [clubRole, setClubRole] = useState<ClubRole | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -58,6 +60,12 @@ function ClubProfileContent({ slug, clubSettings }: ClubProfileClientProps) {
           setProfile(result.data);
           setBio(result.data.bio || '');
         }
+
+        // Fetch club role
+        if (clubSettings.id) {
+          const role = await getUserClubRole(supabase, user.id, clubSettings.id);
+          setClubRole(role);
+        }
       } catch (err) {
         console.error('Error loading profile:', err);
       } finally {
@@ -66,7 +74,7 @@ function ClubProfileContent({ slug, clubSettings }: ClubProfileClientProps) {
     };
 
     loadProfile();
-  }, [user?.id]);
+  }, [user?.id, clubSettings.id]);
 
   const displayName = profile?.Firstname && profile?.Surname
     ? `${profile.Firstname} ${profile.Surname}`
@@ -284,7 +292,7 @@ function ClubProfileContent({ slug, clubSettings }: ClubProfileClientProps) {
                     height: '120px',
                     borderRadius: '50%',
                     backgroundColor: clubSettings.backgroundColor,
-                    border: `4px solid ${clubSettings.selectedColor}`,
+                    border: `4px solid ${clubRole === 'VISITOR' ? '#000000' : (clubRole === 'MEMBER' || profile?.role === 'SUPER_ADMIN' ? '#cda746' : clubSettings.selectedColor)}`,
                     margin: '0 auto',
                     display: 'flex',
                     alignItems: 'center',

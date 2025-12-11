@@ -1,6 +1,7 @@
 import { use } from 'react';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
+import { logError, logDebug } from '@/lib/error-utils';
 import ClubPageClient from './ClubPageClient';
 
 interface ClubPageProps {
@@ -22,6 +23,10 @@ interface Club {
   sessionDuration?: number[];
 }
 
+// Disable caching for this page to ensure booking days settings are always fresh
+export const revalidate = 0;
+export const dynamic = 'force-dynamic';
+
 export default async function ClubPage({ params }: ClubPageProps) {
   const { slug } = await params;
   
@@ -42,13 +47,13 @@ export default async function ClubPage({ params }: ClubPageProps) {
     // Get all active clubs and find by slug
     const result = await supabase
       .from('Clubs')
-      .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
+      .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays')
       .eq('is_active', true);
     
     clubData = result.data;
     error = result.error;
 
-    // If error and it's about missing columns, try without optional fields
+    // If error and it's about missing columns, try without booking days columns (they might not exist yet)
     if (error && (error.code === '42703' || error.message?.includes('column'))) {
       const fallbackResult = await supabase
         .from('Clubs')
@@ -67,7 +72,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
       if (foundClub) {
         club = foundClub as Club;
         // Log the logo value from database
-        console.log('Found club logo from database:', (foundClub as any).logo);
+        logDebug('ClubPage', 'Found club logo from database', { logo: (foundClub as any).logo });
         // Only use backgroundColor if it exists and is not empty
         const clubBgColor = (foundClub as any).backgroundColor;
         if (clubBgColor && typeof clubBgColor === 'string' && clubBgColor.trim() !== '') {
@@ -94,7 +99,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
       }
     }
   } catch (err) {
-    console.error('Error loading club:', err);
+    logError('ClubPage', err, { slug });
   }
 
   const logo = club?.logo || undefined;
@@ -136,17 +141,25 @@ export default async function ClubPage({ params }: ClubPageProps) {
     }
   }
   
-  console.log('Club page props:', { 
+  // Get booking days settings with defaults
+  // Use nullish coalescing to only use default if value is null or undefined (not if it's 0)
+  const membersBookingDays = (club as any)?.membersBookingDays ?? 7;
+  const visitorBookingDays = (club as any)?.visitorBookingDays ?? 3;
+  const coachBookingDays = (club as any)?.coachBookingDays ?? 14;
+  const clubManagerBookingDays = (club as any)?.clubManagerBookingDays ?? 30;
+  
+  logDebug('ClubPage', 'Club page props', { 
     clubId: club?.id, 
     clubName: club?.name,
     logo: logo,
-    rawLogo: (club as any)?.logo,
     openingTime, 
     closingTime, 
     bookingSlotInterval,
     sessionDuration,
-    rawInterval: (club as any)?.bookingSlotInterval,
-    rawClub: club
+    membersBookingDays,
+    visitorBookingDays,
+    coachBookingDays,
+    clubManagerBookingDays,
   });
   
   return <ClubPageClient 
@@ -162,6 +175,10 @@ export default async function ClubPage({ params }: ClubPageProps) {
     closingTime={closingTime}
     bookingSlotInterval={bookingSlotInterval}
     sessionDuration={sessionDuration}
+    membersBookingDays={membersBookingDays}
+    visitorBookingDays={visitorBookingDays}
+    coachBookingDays={coachBookingDays}
+    clubManagerBookingDays={clubManagerBookingDays}
   />;
 }
 

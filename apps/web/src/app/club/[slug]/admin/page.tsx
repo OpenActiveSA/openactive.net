@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { generateSlug } from '@/lib/slug-utils';
 import type { ClubRole } from '@/lib/club-roles';
-import { setUserClubRole } from '@/lib/club-roles';
+import { setUserClubRole, getUserClubRole } from '@/lib/club-roles';
 import styles from '@/components/AdminDashboard.module.css';
 import adminStyles from '@/styles/admin.module.css';
 
@@ -24,6 +24,21 @@ interface Club {
   is_active?: boolean;
   backgroundColor?: string;
   createdAt?: string;
+  // Module settings
+  moduleCourtBooking?: boolean;
+  moduleMemberManager?: boolean;
+  moduleWebsite?: boolean;
+  moduleEmailers?: boolean;
+  moduleVisitorPayment?: boolean;
+  moduleFloodlightPayment?: boolean;
+  moduleEvents?: boolean;
+  moduleCoaching?: boolean;
+  moduleLeague?: boolean;
+  moduleRankings?: boolean;
+  moduleMarketing?: boolean;
+  moduleAccessControl?: boolean;
+  moduleClubWallet?: boolean;
+  moduleFinanceIntegration?: boolean;
 }
 
 export default function ClubAdminPage({ params }: ClubAdminProps) {
@@ -38,6 +53,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
   const [membersBookingDays, setMembersBookingDays] = useState<number>(7);
   const [visitorBookingDays, setVisitorBookingDays] = useState<number>(3);
   const [coachBookingDays, setCoachBookingDays] = useState<number>(14);
+  const [clubManagerBookingDays, setClubManagerBookingDays] = useState<number>(30);
   const [bookingSlotInterval, setBookingSlotInterval] = useState<number>(60);
   const [sessionDuration, setSessionDuration] = useState<number[]>([60]);
   const [openingTime, setOpeningTime] = useState<string>('06:00');
@@ -123,7 +139,10 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
   const [addPlayerError, setAddPlayerError] = useState('');
   const [addPlayerSuccess, setAddPlayerSuccess] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [userClubRole, setUserClubRole] = useState<ClubRole | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [impersonatingPlayerId, setImpersonatingPlayerId] = useState<string | null>(null);
+  const [currentUserAvatarUrl, setCurrentUserAvatarUrl] = useState<string | null>(null);
   
   // Stable user ID for dependency array
   const userId = user?.id || null;
@@ -151,10 +170,10 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
       // Try to fetch with all columns first, if that fails, try without branding columns
       let clubsData, clubsError;
       
-      // First attempt: with all columns including branding and booking settings
+      // First attempt: with all columns including branding, booking settings, and module settings
       const result = await supabase
         .from('Clubs')
-        .select('id, name, country, province, is_active, backgroundColor, logo, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, createdAt')
+        .select('id, name, country, province, is_active, backgroundColor, logo, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleRankings, moduleMarketing, moduleAccessControl, moduleClubWallet, moduleFinanceIntegration, createdAt')
         .order('createdAt', { ascending: false });
       
       clubsData = result.data;
@@ -290,6 +309,14 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
           setCoachBookingDays(days);
         }
       }
+      if ((foundClub as any).clubManagerBookingDays !== null && (foundClub as any).clubManagerBookingDays !== undefined) {
+        const days = typeof (foundClub as any).clubManagerBookingDays === 'number' 
+          ? (foundClub as any).clubManagerBookingDays 
+          : parseInt(String((foundClub as any).clubManagerBookingDays), 10);
+        if (!isNaN(days) && days > 0) {
+          setClubManagerBookingDays(days);
+        }
+      }
       
       setIsLoading(false);
     } catch (err: any) {
@@ -314,37 +341,112 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
       return;
     }
 
-    // Check if user is SUPER_ADMIN
-    const checkSuperAdmin = async () => {
+    // Check authorization: user must be SUPER_ADMIN or CLUB_ADMIN
+    const checkAuthorization = async () => {
       try {
         const supabase = getSupabaseClientClient();
-        const { data, error } = await supabase
+        
+        // Check if user is SUPER_ADMIN (global role)
+        const { data: userData, error: userError } = await supabase
           .from('Users')
-          .select('role')
+          .select('role, avatarUrl')
           .eq('id', user.id)
           .maybeSingle();
 
-        if (error) {
-          console.error('Error checking super admin status:', error);
+        if (userError) {
+          console.error('Error checking user role:', userError);
+          setError('Failed to verify permissions');
+          setIsAuthorized(false);
           return;
         }
 
-        if (data && data.role === 'SUPER_ADMIN') {
-          console.log('User is SUPER_ADMIN, showing impersonate button');
+        if (userData && userData.role === 'SUPER_ADMIN') {
+          console.log('User is SUPER_ADMIN, authorized');
           setIsSuperAdmin(true);
-        } else {
-          console.log('User is not SUPER_ADMIN, role:', data?.role);
+          setUserClubRole(null);
+          setIsAuthorized(true);
+          setCurrentUserAvatarUrl(userData.avatarUrl || null);
+          loadClubData();
+          return;
+        }
+
+        // If not SUPER_ADMIN, check club-specific role
+        // First, we need to get the club ID
+        const clubsResult = await supabase
+          .from('Clubs')
+          .select('id, name')
+          .order('createdAt', { ascending: false });
+
+        if (clubsResult.error) {
+          console.error('Error loading clubs for role check:', clubsResult.error);
+          setError('Failed to verify permissions');
+          setIsAuthorized(false);
+          return;
+        }
+
+        const foundClub = clubsResult.data?.find(
+          (c: any) => generateSlug(c.name) === slug
+        );
+
+        if (!foundClub) {
+          setError('Club not found');
+          setIsAuthorized(false);
+          return;
+        }
+
+        // Get user's club role
+        const clubRole = await getUserClubRole(supabase, user.id, foundClub.id);
+        setUserClubRole(clubRole);
+
+        // Fetch user avatarUrl if not already fetched
+        if (!currentUserAvatarUrl && userData) {
+          setCurrentUserAvatarUrl(userData.avatarUrl || null);
+        } else if (!currentUserAvatarUrl) {
+          // Fetch avatarUrl separately if not in userData
+          const { data: avatarData } = await supabase
+            .from('Users')
+            .select('avatarUrl')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (avatarData) {
+            setCurrentUserAvatarUrl(avatarData.avatarUrl || null);
+          }
+        }
+
+        // Check if user is CLUB_ADMIN for this club
+        if (clubRole === 'CLUB_ADMIN') {
+          console.log('User is CLUB_ADMIN for this club, authorized');
           setIsSuperAdmin(false);
+          setIsAuthorized(true);
+          // Load club data after authorization is confirmed
+          loadClubData();
+        } else if (clubRole === 'VISITOR') {
+          console.log('User is VISITOR, access denied');
+          setError('Visitors do not have access to the admin section');
+          setIsAuthorized(false);
+          setIsLoading(false);
+          setTimeout(() => {
+            router.push(`/club/${slug}`);
+          }, 2000); // Give user time to see the error message
+        } else {
+          console.log('User role:', clubRole, '- access denied');
+          setError('You do not have permission to access the admin section. Only Club Managers and Super Admins can access this page.');
+          setIsAuthorized(false);
+          setIsLoading(false);
+          setTimeout(() => {
+            router.push(`/club/${slug}`);
+          }, 2000); // Give user time to see the error message
         }
       } catch (err) {
-        console.error('Error checking super admin status:', err);
+        console.error('Error checking authorization:', err);
+        setError('Failed to verify permissions');
+        setIsAuthorized(false);
       }
     };
 
-    checkSuperAdmin();
-    loadClubData();
+    checkAuthorization();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user?.id, session?.user?.id]);
+  }, [authLoading, user?.id, session?.user?.id, slug]);
 
   // Load bookings for the club
   const loadBookings = useCallback(async () => {
@@ -715,7 +817,87 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
 
     try {
       const supabase = getSupabaseClientClient();
-      const result = await setUserClubRole(supabase, selectedPlayerToAdd.id, club.id, selectedRoleToAdd);
+      
+      // Log the attempt
+      console.log('Adding player:', {
+        userId: selectedPlayerToAdd.id,
+        clubId: club.id,
+        role: selectedRoleToAdd
+      });
+      
+      // Verify function exists
+      if (typeof setUserClubRole !== 'function') {
+        console.error('setUserClubRole is not a function:', typeof setUserClubRole);
+        setAddPlayerError('Failed to add player: Function not available');
+        return;
+      }
+
+      let result;
+      try {
+        console.log('Calling setUserClubRole with:', {
+          userId: selectedPlayerToAdd.id,
+          clubId: club.id,
+          role: selectedRoleToAdd,
+          supabaseExists: !!supabase,
+          functionType: typeof setUserClubRole
+        });
+        
+        // Try calling the function with explicit Promise handling
+        const promise = setUserClubRole(supabase, selectedPlayerToAdd.id, club.id, selectedRoleToAdd);
+        console.log('Promise created:', promise);
+        console.log('Is promise:', promise instanceof Promise);
+        
+        result = await promise;
+        
+        console.log('setUserClubRole returned:', result);
+        console.log('Result type:', typeof result);
+        console.log('Result keys:', result ? Object.keys(result) : 'null/undefined');
+        
+        // If result is still undefined, try direct implementation as fallback
+        if (!result) {
+          console.warn('setUserClubRole returned undefined, using fallback implementation');
+          try {
+            const { error: upsertError } = await supabase
+              .from('UserClubRoles')
+              .upsert(
+                {
+                  userId: selectedPlayerToAdd.id,
+                  clubId: club.id,
+                  role: selectedRoleToAdd,
+                  updatedAt: new Date().toISOString(),
+                },
+                {
+                  onConflict: 'userId,clubId',
+                }
+              );
+
+            if (upsertError) {
+              result = { success: false, error: upsertError.message };
+            } else {
+              result = { success: true };
+            }
+            console.log('Fallback implementation result:', result);
+          } catch (fallbackErr: any) {
+            console.error('Fallback implementation error:', fallbackErr);
+            result = { success: false, error: fallbackErr.message || 'Unknown error' };
+          }
+        }
+      } catch (err: any) {
+        console.error('Error calling setUserClubRole:', err);
+        console.error('Error stack:', err.stack);
+        console.error('Error name:', err.name);
+        console.error('Error message:', err.message);
+        setAddPlayerError(`Failed to add player: ${err.message || 'Unknown error occurred'}`);
+        return;
+      }
+
+      // Check if result is valid
+      if (!result || typeof result !== 'object') {
+        console.error('setUserClubRole returned invalid result:', result);
+        console.error('Result type:', typeof result);
+        setAddPlayerError('Failed to add player: Invalid response from server');
+        return;
+      }
 
       if (result.success) {
         setAddPlayerSuccess(true);
@@ -734,7 +916,13 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
               .select('userId, role, Users!inner(id, email, Firstname, Surname, avatarUrl, lastLoginAt)')
               .eq('clubId', club.id);
 
-            if (!rolesError && roles) {
+            if (rolesError) {
+              console.error('Error reloading players:', rolesError);
+              setAddPlayerError(`Player added but failed to refresh list: ${rolesError.message}`);
+              return;
+            }
+
+            if (roles) {
               const playersList: Array<{
                 id: string;
                 name: string;
@@ -767,8 +955,9 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
               playersList.sort((a, b) => a.name.localeCompare(b.name));
               setPlayers(playersList);
             }
-          } catch (err) {
+          } catch (err: any) {
             console.error('Error reloading players:', err);
+            setAddPlayerError(`Player added but failed to refresh list: ${err.message || 'Unknown error'}`);
           } finally {
             setIsLoadingPlayers(false);
           }
@@ -779,10 +968,14 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
         // Clear success message after 3 seconds
         setTimeout(() => setAddPlayerSuccess(false), 3000);
       } else {
-        setAddPlayerError(result.error || 'Failed to add player');
+        const errorMsg = result.error || 'Failed to add player';
+        console.error('Failed to add player:', errorMsg);
+        setAddPlayerError(errorMsg);
       }
     } catch (err: any) {
-      setAddPlayerError(err.message || 'Failed to add player');
+      const errorMsg = err.message || 'Failed to add player';
+      console.error('Exception adding player:', err);
+      setAddPlayerError(errorMsg);
     } finally {
       setIsAddingPlayer(false);
     }
@@ -832,12 +1025,12 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
   };
 
   // Show loading state
-  if (authLoading || isLoading) {
+  if (authLoading || isLoading || !isAuthorized) {
     return (
       <div className={styles.adminLayout}>
         <div className={styles.loadingContainer}>
           <div className={styles.spinner}></div>
-          <p>{authLoading ? 'Loading authentication...' : 'Loading club data...'}</p>
+          <p>{authLoading ? 'Loading authentication...' : isLoading ? 'Loading club data...' : 'Verifying permissions...'}</p>
           {error && (
             <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '4px', color: '#fca5a5' }}>
               {error}
@@ -854,9 +1047,27 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
         <div className={styles.loadingContainer}>
           <h2>Error</h2>
           <p>{error || 'Club not found'}</p>
-          <button onClick={() => router.push('/admin')} className={styles.btnPrimary} style={{ marginTop: '16px' }}>
-            Back to Admin
-          </button>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={() => router.push(`/club/${slug}`)} className={styles.btnPrimary}>
+              Back to Club
+            </button>
+            {user && (
+              <button 
+                onClick={async () => {
+                  try {
+                    await signOut();
+                    router.push('/login');
+                  } catch (err) {
+                    console.error('Error logging out:', err);
+                    router.push('/login');
+                  }
+                }} 
+                className={styles.btnSecondary}
+              >
+                Log Out
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1068,7 +1279,33 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
 
         <div className={styles.sidebarFooter}>
           <div className={styles.userInfo}>
-            <div className={styles.userAvatar}>{userName.charAt(0).toUpperCase()}</div>
+            {currentUserAvatarUrl ? (
+              <img
+                src={currentUserAvatarUrl}
+                alt={userName}
+                className={styles.userAvatar}
+                style={{
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  width: '40px',
+                  height: '40px'
+                }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const fallback = target.nextElementSibling as HTMLElement;
+                  if (fallback) {
+                    fallback.style.display = 'flex';
+                  }
+                }}
+              />
+            ) : null}
+            <div 
+              className={styles.userAvatar}
+              style={{ display: currentUserAvatarUrl ? 'none' : 'flex' }}
+            >
+              {userName.charAt(0).toUpperCase()}
+            </div>
             {!isSidebarCollapsed && (
               <div className={styles.userDetails}>
                 <div className={styles.userName}>{userName}</div>
@@ -1131,75 +1368,167 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                 </div>
               </div>
 
-              <div className={styles.statsGrid}>
-                <div className={styles.statCard}>
-                  <div className={`${styles.statIcon} ${styles.statIconBlue}`}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div className={adminStyles.featuresGrid}>
+                {/* Court Booking */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                       <line x1="3" y1="9" x2="21" y2="9"></line>
                       <line x1="9" y1="21" x2="9" y2="9"></line>
                     </svg>
                   </div>
-                  <div className={styles.statContent}>
-                    <h3>{club.numberOfCourts || 0}</h3>
-                    <p>Courts</p>
-                  </div>
+                  <h3 className={adminStyles.featureTitle}>Court Booking</h3>
+                  <span className={`${adminStyles.featureStatus} ${(club?.moduleCourtBooking ?? true) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {(club?.moduleCourtBooking ?? true) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>{bookings.length} bookings</div>
                 </div>
 
-                <div className={styles.statCard}>
-                  <div className={`${styles.statIcon} ${styles.statIconGreen}`}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {/* Member Manager */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                      <line x1="7" y1="8" x2="17" y2="8"></line>
+                      <line x1="7" y1="12" x2="17" y2="12"></line>
+                      <line x1="7" y1="16" x2="12" y2="16"></line>
+                    </svg>
+                  </div>
+                  <h3 className={adminStyles.featureTitle}>Member Manager</h3>
+                  <span className={`${adminStyles.featureStatus} ${(club?.moduleMemberManager ?? false) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {(club?.moduleMemberManager ?? false) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>Find out more</div>
+                </div>
+
+                {/* Website */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                      <line x1="8" y1="21" x2="16" y2="21"></line>
+                      <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                  </div>
+                  <h3 className={adminStyles.featureTitle}>Website</h3>
+                  <span className={`${adminStyles.featureStatus} ${(club?.moduleWebsite ?? true) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {(club?.moduleWebsite ?? true) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>{bookings.length} bookings</div>
+                </div>
+
+                {/* Emailers */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                      <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                  </div>
+                  <h3 className={adminStyles.featureTitle}>Emailers</h3>
+                  <span className={`${adminStyles.featureStatus} ${(club?.moduleEmailers ?? true) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {(club?.moduleEmailers ?? true) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>{bookings.length} bookings</div>
+                </div>
+
+                {/* Payments */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                      <line x1="1" y1="10" x2="23" y2="10"></line>
+                    </svg>
+                  </div>
+                  <h3 className={adminStyles.featureTitle}>Payments</h3>
+                  <span className={`${adminStyles.featureStatus} ${((club?.moduleVisitorPayment ?? true) || (club?.moduleFloodlightPayment ?? true)) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {((club?.moduleVisitorPayment ?? true) || (club?.moduleFloodlightPayment ?? true)) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>{bookings.length} bookings</div>
+                </div>
+
+                {/* Events */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                      <line x1="16" y1="2" x2="16" y2="6"></line>
+                      <line x1="8" y1="2" x2="8" y2="6"></line>
+                      <line x1="3" y1="10" x2="21" y2="10"></line>
+                      <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"></path>
+                    </svg>
+                  </div>
+                  <h3 className={adminStyles.featureTitle}>Events</h3>
+                  <span className={`${adminStyles.featureStatus} ${(club?.moduleEvents ?? true) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {(club?.moduleEvents ?? true) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>{bookings.length} bookings</div>
+                </div>
+
+                {/* Coaching */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                       <circle cx="9" cy="7" r="4"></circle>
                       <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                       <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                     </svg>
                   </div>
-                  <div className={styles.statContent}>
-                    <h3>0</h3>
-                    <p>Members</p>
-                  </div>
+                  <h3 className={adminStyles.featureTitle}>Coaching</h3>
+                  <span className={`${adminStyles.featureStatus} ${(club?.moduleCoaching ?? true) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {(club?.moduleCoaching ?? true) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>{bookings.length} bookings</div>
                 </div>
 
-                <div className={styles.statCard}>
-                  <div className={`${styles.statIcon} ${styles.statIconPurple}`}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                      <line x1="16" y1="2" x2="16" y2="6"></line>
-                      <line x1="8" y1="2" x2="8" y2="6"></line>
-                      <line x1="3" y1="10" x2="21" y2="10"></line>
+                {/* League */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <circle cx="12" cy="12" r="6"></circle>
+                      <circle cx="12" cy="12" r="2"></circle>
                     </svg>
                   </div>
-                  <div className={styles.statContent}>
-                    <h3>0</h3>
-                    <p>Bookings</p>
-                  </div>
+                  <h3 className={adminStyles.featureTitle}>League</h3>
+                  <span className={`${adminStyles.featureStatus} ${(club?.moduleLeague ?? true) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {(club?.moduleLeague ?? true) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>{bookings.length} bookings</div>
                 </div>
-              </div>
 
-              <div className={styles.contentSection} style={{ marginTop: '24px' }}>
-                <div className={styles.sectionHeader}>
-                  <div>
-                    <h2 style={{ fontSize: '20px', margin: 0 }}>Club Information</h2>
+
+                {/* Access Control */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
                   </div>
+                  <h3 className={adminStyles.featureTitle}>Access Control</h3>
+                  <span className={`${adminStyles.featureStatus} ${(club?.moduleAccessControl ?? true) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {(club?.moduleAccessControl ?? true) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>{bookings.length} bookings</div>
                 </div>
-                <div style={{ padding: '24px' }}>
-                  <div style={{ display: 'flex', padding: '12px 0', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                    <span style={{ fontWeight: 500, color: 'rgba(255, 255, 255, 0.7)', minWidth: '120px' }}>Name:</span>
-                    <span>{club.name}</span>
+
+                {/* Finance Integration */}
+                <div className={adminStyles.featureCard}>
+                  <div className={adminStyles.featureIcon}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                      <path d="M9 14l2 2 4-4"></path>
+                    </svg>
                   </div>
-                  {(club.country || club.province) && (
-                    <div style={{ display: 'flex', padding: '12px 0', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                      <span style={{ fontWeight: 500, color: 'rgba(255, 255, 255, 0.7)', minWidth: '120px' }}>Location:</span>
-                      <span>{[club.province, club.country].filter(Boolean).join(', ')}</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', padding: '12px 0' }}>
-                    <span style={{ fontWeight: 500, color: 'rgba(255, 255, 255, 0.7)', minWidth: '120px' }}>Status:</span>
-                    <span className={club.is_active ? styles.statusActive : styles.statusInactive}>
-                      {club.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
+                  <h3 className={adminStyles.featureTitle}>Finance Integration</h3>
+                  <span className={`${adminStyles.featureStatus} ${(club?.moduleFinanceIntegration ?? true) ? adminStyles.featureStatusActive : adminStyles.featureStatusDisabled}`}>
+                    {(club?.moduleFinanceIntegration ?? true) ? 'Active' : 'Disabled'}
+                  </span>
+                  <div className={adminStyles.featureDetail}>{bookings.length} bookings</div>
                 </div>
               </div>
             </div>
@@ -1572,6 +1901,77 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                   </div>
                 </div>
 
+                {/* Club Manager Settings */}
+                <div style={{
+                  padding: '24px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <h2 style={{
+                    fontSize: '20px',
+                    fontWeight: 600,
+                    marginBottom: '8px',
+                    color: '#ffffff'
+                  }}>
+                    Club Manager Settings
+                  </h2>
+                  <p style={{
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    fontSize: '14px',
+                    marginBottom: '24px'
+                  }}>
+                    Configure settings for club managers. Super Admins will use the same setting.
+                  </p>
+                  
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <label style={{
+                      color: 'rgba(255, 255, 255, 0.9)',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      minWidth: '200px'
+                    }}>
+                      Days in advance they can book:
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="365"
+                      value={clubManagerBookingDays}
+                      onChange={(e) => setClubManagerBookingDays(parseInt(e.target.value) || 0)}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '6px',
+                        color: '#ffffff',
+                        fontSize: '14px',
+                        width: '100px',
+                        outline: 'none'
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                      }}
+                    />
+                    <span style={{
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      fontSize: '14px'
+                    }}>
+                      days
+                    </span>
+                  </div>
+                </div>
+
                 {/* Save Button */}
                 <div style={{
                   display: 'flex',
@@ -1621,6 +2021,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                             membersBookingDays: membersBookingDays,
                             visitorBookingDays: visitorBookingDays,
                             coachBookingDays: coachBookingDays,
+                            clubManagerBookingDays: clubManagerBookingDays,
                           }),
                         });
 
@@ -2252,56 +2653,40 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                   <p className={styles.sectionSubtitle}>Manage club players</p>
                 </div>
               </div>
-              <div style={{ padding: '32px' }}>
+              <div className={adminStyles.clubPlayersContainer}>
                 {/* Search input */}
-                <div style={{ marginBottom: '24px' }}>
+                <div className={adminStyles.playerSearchContainer}>
                   <input
                     type="text"
                     placeholder="Search players by name or email..."
                     value={playerSearchTerm}
                     onChange={(e) => setPlayerSearchTerm(e.target.value)}
-                    style={{
-                      width: '100%',
-                      maxWidth: '400px',
-                      padding: '12px 16px',
-                      fontSize: '14px',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '6px',
-                      outline: 'none',
-                      transition: 'border-color 0.2s'
-                    }}
-                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-                    onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                    className={adminStyles.playerSearchInput}
                   />
                 </div>
 
                 {/* Loading state */}
                 {isLoadingPlayers ? (
-                  <div style={{ textAlign: 'center', padding: '48px' }}>
+                  <div className={adminStyles.loadingContainer}>
                     <div className={styles.spinner} style={{ margin: '0 auto' }}></div>
-                    <p style={{ marginTop: '16px', color: '#6b7280' }}>Loading players...</p>
+                    <p className={adminStyles.loadingText}>Loading players...</p>
                   </div>
                 ) : filteredPlayers.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '48px', color: '#6b7280' }}>
+                  <div className={adminStyles.emptyState}>
                     {playerSearchTerm ? 'No players found matching your search.' : 'No players linked to this club yet.'}
                   </div>
                 ) : (
                   /* Players table */
-                  <div style={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: '8px',
-                    border: '1px solid #e5e7eb',
-                    overflow: 'hidden'
-                  }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <div className={adminStyles.playersTableContainer}>
+                    <table className={adminStyles.playersTable}>
                       <thead>
-                        <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                          <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Player</th>
-                          <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Email</th>
-                          <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Role</th>
-                          <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Last Login</th>
+                        <tr className={adminStyles.playersTableHeader}>
+                          <th className={adminStyles.playersTableHeaderCell}>Player</th>
+                          <th className={adminStyles.playersTableHeaderCell}>Email</th>
+                          <th className={adminStyles.playersTableHeaderCell}>Role</th>
+                          <th className={adminStyles.playersTableHeaderCell}>Last Login</th>
                           {isSuperAdmin && (
-                            <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>
+                            <th className={adminStyles.playersTableHeaderCell}>Actions</th>
                           )}
                         </tr>
                       </thead>
@@ -2309,25 +2694,18 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                         {filteredPlayers.map((player, index) => (
                           <tr
                             key={player.id}
+                            className={adminStyles.playersTableRow}
                             style={{
-                              borderBottom: index < filteredPlayers.length - 1 ? '1px solid #f3f4f6' : 'none',
-                              transition: 'background-color 0.2s'
+                              borderBottom: index < filteredPlayers.length - 1 ? '1px solid #f3f4f6' : 'none'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                           >
-                            <td style={{ padding: '16px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <td className={adminStyles.playerCell}>
+                              <div className={adminStyles.playerInfo}>
                                 {player.avatarUrl ? (
                                   <img
                                     src={player.avatarUrl}
                                     alt={player.name}
-                                    style={{
-                                      width: '40px',
-                                      height: '40px',
-                                      borderRadius: '50%',
-                                      objectFit: 'cover'
-                                    }}
+                                    className={adminStyles.playerAvatar}
                                     onError={(e) => {
                                       e.currentTarget.style.display = 'none';
                                       if (e.currentTarget.nextElementSibling) {
@@ -2337,40 +2715,24 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                                   />
                                 ) : null}
                                 <div
-                                  style={{
-                                    width: '40px',
-                                    height: '40px',
-                                    borderRadius: '50%',
-                                    backgroundColor: '#3b82f6',
-                                    color: '#ffffff',
-                                    display: player.avatarUrl ? 'none' : 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '16px',
-                                    fontWeight: '600'
-                                  }}
+                                  className={adminStyles.playerAvatarPlaceholder}
+                                  style={{ display: player.avatarUrl ? 'none' : 'flex' }}
                                 >
                                   {player.name.charAt(0).toUpperCase()}
                                 </div>
-                                <span style={{ fontSize: '14px', fontWeight: '500', color: '#111827' }}>{player.name}</span>
+                                <span className={adminStyles.playerName}>{player.name}</span>
                               </div>
                             </td>
-                            <td style={{ padding: '16px', fontSize: '14px', color: '#6b7280' }}>{player.email}</td>
-                            <td style={{ padding: '16px' }}>
+                            <td className={adminStyles.playerEmail}>{player.email}</td>
+                            <td className={adminStyles.playersTableCell}>
                               <span
-                                style={{
-                                  display: 'inline-block',
-                                  padding: '4px 12px',
-                                  borderRadius: '12px',
-                                  fontSize: '12px',
-                                  fontWeight: '500',
-                                  ...getRoleBadgeStyle(player.role)
-                                }}
+                                className={adminStyles.roleBadge}
+                                style={getRoleBadgeStyle(player.role)}
                               >
                                 {getRoleLabel(player.role)}
                               </span>
                             </td>
-                            <td style={{ padding: '16px', fontSize: '14px', color: '#6b7280' }}>
+                            <td className={adminStyles.playerEmail}>
                               {player.lastLoginAt
                                 ? new Date(player.lastLoginAt).toLocaleDateString('en-US', {
                                     year: 'numeric',
@@ -2380,31 +2742,11 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                                 : 'Never'}
                             </td>
                             {isSuperAdmin && (
-                              <td style={{ padding: '16px' }}>
+                              <td className={adminStyles.playersTableCell}>
                                 <button
                                   onClick={() => handleImpersonatePlayer(player.id)}
                                   disabled={impersonatingPlayerId === player.id}
-                                  style={{
-                                    padding: '6px 12px',
-                                    backgroundColor: impersonatingPlayerId === player.id ? '#9ca3af' : '#3b82f6',
-                                    color: '#ffffff',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    fontSize: '12px',
-                                    fontWeight: '500',
-                                    cursor: impersonatingPlayerId === player.id ? 'not-allowed' : 'pointer',
-                                    transition: 'background-color 0.2s'
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    if (impersonatingPlayerId !== player.id) {
-                                      e.currentTarget.style.backgroundColor = '#2563eb';
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    if (impersonatingPlayerId !== player.id) {
-                                      e.currentTarget.style.backgroundColor = '#3b82f6';
-                                    }
-                                  }}
+                                  className={adminStyles.impersonateButton}
                                 >
                                   {impersonatingPlayerId === player.id ? 'Logging in...' : 'Log in as player'}
                                 </button>
@@ -2419,70 +2761,39 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
 
                 {/* Results count */}
                 {!isLoadingPlayers && filteredPlayers.length > 0 && (
-                  <div style={{ marginTop: '16px', fontSize: '14px', color: '#6b7280' }}>
+                  <div className={adminStyles.resultsCount}>
                     Showing {filteredPlayers.length} of {players.length} player{players.length !== 1 ? 's' : ''}
                     {playerSearchTerm && ` matching "${playerSearchTerm}"`}
                   </div>
                 )}
 
                 {/* Add Player Section */}
-                <div style={{
-                  marginTop: '48px',
-                  paddingTop: '32px',
-                  borderTop: '2px solid #e5e7eb'
-                }}>
-                  <h2 style={{
-                    fontSize: '20px',
-                    fontWeight: '600',
-                    color: '#111827',
-                    marginBottom: '16px'
-                  }}>
+                <div className={adminStyles.addPlayerSection}>
+                  <h2 className={adminStyles.addPlayerTitle}>
                     Add Player to Club
                   </h2>
 
                   {/* Success message */}
                   {addPlayerSuccess && (
-                    <div style={{
-                      marginBottom: '16px',
-                      padding: '12px 16px',
-                      backgroundColor: '#d1fae5',
-                      border: '1px solid #10b981',
-                      borderRadius: '6px',
-                      color: '#065f46',
-                      fontSize: '14px'
-                    }}>
+                    <div className={adminStyles.successMessage}>
                       Player added successfully!
                     </div>
                   )}
 
                   {/* Error message */}
                   {addPlayerError && (
-                    <div style={{
-                      marginBottom: '16px',
-                      padding: '12px 16px',
-                      backgroundColor: '#fee2e2',
-                      border: '1px solid #ef4444',
-                      borderRadius: '6px',
-                      color: '#991b1b',
-                      fontSize: '14px'
-                    }}>
+                    <div className={adminStyles.errorMessage}>
                       {addPlayerError}
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div className={adminStyles.addPlayerForm}>
                     {/* Search input */}
-                    <div>
-                      <label style={{
-                        display: 'block',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        color: '#374151',
-                        marginBottom: '8px'
-                      }}>
+                    <div className={adminStyles.addPlayerFormGroup}>
+                      <label className={adminStyles.addPlayerLabel}>
                         Search for Player
                       </label>
-                      <div style={{ position: 'relative' }}>
+                      <div className={adminStyles.addPlayerInputContainer}>
                         <input
                           type="text"
                           placeholder="Search by name or email..."
@@ -2491,25 +2802,10 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                             setAddPlayerSearchTerm(e.target.value);
                             setSelectedPlayerToAdd(null);
                           }}
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            fontSize: '14px',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '6px',
-                            outline: 'none',
-                            transition: 'border-color 0.2s'
-                          }}
-                          onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-                          onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                          className={adminStyles.addPlayerInput}
                         />
                         {isSearchingPlayers && (
-                          <div style={{
-                            position: 'absolute',
-                            right: '12px',
-                            top: '50%',
-                            transform: 'translateY(-50%)'
-                          }}>
+                          <div className={adminStyles.searchSpinner}>
                             <div className={styles.spinner} style={{ width: '16px', height: '16px' }}></div>
                           </div>
                         )}
@@ -2517,66 +2813,29 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
 
                       {/* Search results dropdown */}
                       {addPlayerSearchTerm.length >= 2 && addPlayerSearchResults.length > 0 && !selectedPlayerToAdd && (
-                        <div style={{
-                          marginTop: '8px',
-                          backgroundColor: '#ffffff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                          maxHeight: '200px',
-                          overflowY: 'auto'
-                        }}>
+                        <div className={adminStyles.searchResultsDropdown}>
                           {addPlayerSearchResults.map((user) => (
                             <button
                               key={user.id}
                               onClick={() => setSelectedPlayerToAdd(user)}
-                              style={{
-                                width: '100%',
-                                padding: '12px 16px',
-                                textAlign: 'left',
-                                border: 'none',
-                                backgroundColor: 'transparent',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                transition: 'background-color 0.2s'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                              className={adminStyles.searchResultButton}
                             >
                               {user.avatarUrl ? (
                                 <img
                                   src={user.avatarUrl}
                                   alt={user.name}
-                                  style={{
-                                    width: '32px',
-                                    height: '32px',
-                                    borderRadius: '50%',
-                                    objectFit: 'cover'
-                                  }}
+                                  className={adminStyles.searchResultAvatar}
                                 />
                               ) : (
-                                <div style={{
-                                  width: '32px',
-                                  height: '32px',
-                                  borderRadius: '50%',
-                                  backgroundColor: '#3b82f6',
-                                  color: '#ffffff',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: '14px',
-                                  fontWeight: '600'
-                                }}>
+                                <div className={adminStyles.searchResultAvatarPlaceholder}>
                                   {user.name.charAt(0).toUpperCase()}
                                 </div>
                               )}
-                              <div>
-                                <div style={{ fontSize: '14px', fontWeight: '500', color: '#111827' }}>
+                              <div className={adminStyles.searchResultInfo}>
+                                <div className={adminStyles.searchResultName}>
                                   {user.name}
                                 </div>
-                                <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                <div className={adminStyles.searchResultEmail}>
                                   {user.email}
                                 </div>
                               </div>
@@ -2586,13 +2845,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                       )}
 
                       {addPlayerSearchTerm.length >= 2 && !isSearchingPlayers && addPlayerSearchResults.length === 0 && (
-                        <div style={{
-                          marginTop: '8px',
-                          padding: '12px',
-                          fontSize: '14px',
-                          color: '#6b7280',
-                          textAlign: 'center'
-                        }}>
+                        <div className={adminStyles.noResultsMessage}>
                           No users found
                         </div>
                       )}
@@ -2600,48 +2853,24 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
 
                     {/* Selected player display */}
                     {selectedPlayerToAdd && (
-                      <div style={{
-                        padding: '16px',
-                        backgroundColor: '#f9fafb',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div className={adminStyles.selectedPlayerCard}>
+                        <div className={adminStyles.selectedPlayerInfo}>
                           {selectedPlayerToAdd.avatarUrl ? (
                             <img
                               src={selectedPlayerToAdd.avatarUrl}
                               alt={selectedPlayerToAdd.name}
-                              style={{
-                                width: '40px',
-                                height: '40px',
-                                borderRadius: '50%',
-                                objectFit: 'cover'
-                              }}
+                              className={adminStyles.playerAvatar}
                             />
                           ) : (
-                            <div style={{
-                              width: '40px',
-                              height: '40px',
-                              borderRadius: '50%',
-                              backgroundColor: '#3b82f6',
-                              color: '#ffffff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '16px',
-                              fontWeight: '600'
-                            }}>
+                            <div className={adminStyles.playerAvatarPlaceholder}>
                               {selectedPlayerToAdd.name.charAt(0).toUpperCase()}
                             </div>
                           )}
                           <div>
-                            <div style={{ fontSize: '14px', fontWeight: '500', color: '#111827' }}>
+                            <div className={adminStyles.selectedPlayerName}>
                               {selectedPlayerToAdd.name}
                             </div>
-                            <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                            <div className={adminStyles.selectedPlayerEmail}>
                               {selectedPlayerToAdd.email}
                             </div>
                           </div>
@@ -2651,15 +2880,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                             setSelectedPlayerToAdd(null);
                             setAddPlayerSearchTerm('');
                           }}
-                          style={{
-                            padding: '4px 8px',
-                            backgroundColor: 'transparent',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '4px',
-                            color: '#6b7280',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
+                          className={adminStyles.changeButton}
                         >
                           Change
                         </button>
@@ -2667,32 +2888,14 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                     )}
 
                     {/* Role selection */}
-                    <div>
-                      <label style={{
-                        display: 'block',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        color: '#374151',
-                        marginBottom: '8px'
-                      }}>
+                    <div className={adminStyles.addPlayerFormGroup}>
+                      <label className={adminStyles.addPlayerLabel}>
                         Assign Role
                       </label>
                       <select
                         value={selectedRoleToAdd}
                         onChange={(e) => setSelectedRoleToAdd(e.target.value as ClubRole)}
-                        style={{
-                          width: '100%',
-                          padding: '12px 16px',
-                          fontSize: '14px',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '6px',
-                          outline: 'none',
-                          backgroundColor: '#ffffff',
-                          cursor: 'pointer',
-                          transition: 'border-color 0.2s'
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-                        onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                        className={adminStyles.roleSelect}
                       >
                         <option value="MEMBER">Member</option>
                         <option value="VISITOR">Visitor</option>
@@ -2705,28 +2908,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                     <button
                       onClick={handleAddPlayer}
                       disabled={!selectedPlayerToAdd || isAddingPlayer}
-                      style={{
-                        padding: '12px 24px',
-                        backgroundColor: selectedPlayerToAdd && !isAddingPlayer ? '#3b82f6' : '#9ca3af',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        cursor: selectedPlayerToAdd && !isAddingPlayer ? 'pointer' : 'not-allowed',
-                        transition: 'background-color 0.2s',
-                        alignSelf: 'flex-start'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (selectedPlayerToAdd && !isAddingPlayer) {
-                          e.currentTarget.style.backgroundColor = '#2563eb';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (selectedPlayerToAdd && !isAddingPlayer) {
-                          e.currentTarget.style.backgroundColor = '#3b82f6';
-                        }
-                      }}
+                      className={adminStyles.addPlayerButton}
                     >
                       {isAddingPlayer ? 'Adding...' : 'Add Player to Club'}
                     </button>

@@ -378,7 +378,7 @@ export default function ProfilePage() {
                     height: '120px',
                     borderRadius: '50%',
                     backgroundColor: '#052333',
-                    border: '4px solid #fbbf24',
+                    border: `4px solid ${profile?.role === 'SUPER_ADMIN' || profile?.role === 'MEMBER' ? '#cda746' : '#052333'}`,
                     margin: '0 auto',
                     display: 'flex',
                     alignItems: 'center',

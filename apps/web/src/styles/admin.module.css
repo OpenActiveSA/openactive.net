@@ -173,3 +173,460 @@
   font-size: 14px;
 }
 
+/* Club Players Section */
+.clubPlayersContainer {
+  padding: 32px;
+}
+
+.playerSearchContainer {
+  margin-bottom: 24px;
+}
+
+.playerSearchInput {
+  width: 100%;
+  max-width: 400px;
+  padding: 12px 16px;
+  font-size: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.playerSearchInput:focus {
+  border-color: #3b82f6;
+}
+
+.loadingContainer {
+  text-align: center;
+  padding: 48px;
+}
+
+.loadingText {
+  margin-top: 16px;
+  color: #6b7280;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 48px;
+  color: #6b7280;
+}
+
+.playersTableContainer {
+  background-color: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.playersTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.playersTableHeader {
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.playersTableHeaderCell {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.playersTableRow {
+  border-bottom: 1px solid #f3f4f6;
+  transition: background-color 0.2s;
+}
+
+.playersTableRow:hover {
+  background-color: #f9fafb;
+}
+
+.playersTableRow:last-child {
+  border-bottom: none;
+}
+
+.playersTableCell {
+  padding: 16px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.playerCell {
+  padding: 16px;
+}
+
+.playerInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.playerAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.playerAvatarPlaceholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #3b82f6;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.playerName {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.playerEmail {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.roleBadge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.impersonateButton {
+  padding: 6px 12px;
+  background-color: #3b82f6;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.impersonateButton:hover {
+  background-color: #2563eb;
+}
+
+.impersonateButton:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.resultsCount {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.addPlayerSection {
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 2px solid #e5e7eb;
+}
+
+.addPlayerTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 16px;
+}
+
+.successMessage {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background-color: #d1fae5;
+  border: 1px solid #10b981;
+  border-radius: 6px;
+  color: #065f46;
+  font-size: 14px;
+}
+
+.errorMessage {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background-color: #fee2e2;
+  border: 1px solid #ef4444;
+  border-radius: 6px;
+  color: #991b1b;
+  font-size: 14px;
+}
+
+.addPlayerForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.addPlayerFormGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.addPlayerLabel {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+  margin-bottom: 8px;
+}
+
+.addPlayerInputContainer {
+  position: relative;
+}
+
+.addPlayerInput {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.addPlayerInput:focus {
+  border-color: #3b82f6;
+}
+
+.searchSpinner {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.searchResultsDropdown {
+  margin-top: 8px;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.searchResultButton {
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  border: none;
+  background-color: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background-color 0.2s;
+}
+
+.searchResultButton:hover {
+  background-color: #f9fafb;
+}
+
+.searchResultAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.searchResultAvatarPlaceholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #3b82f6;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.searchResultInfo {
+  display: flex;
+  flex-direction: column;
+}
+
+.searchResultName {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.searchResultEmail {
+  font-size: 12px;
+  color: #e5e7eb;
+}
+
+.noResultsMessage {
+  margin-top: 8px;
+  padding: 12px;
+  font-size: 14px;
+  color: #ffffff;
+  text-align: center;
+}
+
+.selectedPlayerCard {
+  padding: 16px;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.selectedPlayerInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selectedPlayerName {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.selectedPlayerEmail {
+  font-size: 12px;
+  color: #e5e7eb;
+}
+
+.changeButton {
+  padding: 4px 8px;
+  background-color: transparent;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.changeButton:hover {
+  background-color: #f3f4f6;
+}
+
+.roleSelect {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  outline: none;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.roleSelect:focus {
+  border-color: #3b82f6;
+}
+
+.addPlayerButton {
+  padding: 12px 24px;
+  background-color: #3b82f6;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  align-self: flex-start;
+}
+
+.addPlayerButton:hover {
+  background-color: #2563eb;
+}
+
+.addPlayerButton:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Feature Cards Grid */
+.featuresGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  padding: 32px;
+}
+
+.featureCard {
+  background-color: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.featureCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.featureIcon {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #667eea;
+}
+
+.featureTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 8px;
+}
+
+.featureStatus {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.featureStatusActive {
+  background-color: #10b981;
+  color: #ffffff;
+}
+
+.featureStatusDisabled {
+  background-color: #6b7280;
+  color: #ffffff;
+}
+
+.featureDetail {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 2px;
+}
+

@@ -260,8 +260,8 @@
 .submitButton {
   width: 100%;
   padding: 14px;
-  background-color: #ffffff;
-  color: #000000;
+  background-color: #667eea;
+  color: #ffffff;
   border: none;
   border-radius: 4px;
   font-size: 16px;
@@ -269,11 +269,12 @@
   cursor: pointer;
   font-family: inherit;
   margin-bottom: 24px;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, opacity 0.2s;
 }
 
 .submitButton:hover:not(:disabled) {
-  background-color: #f0f0f0;
+  background-color: #5568d3;
+  opacity: 0.9;
 }
 
 .submitButton:disabled {

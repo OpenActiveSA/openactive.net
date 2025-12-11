@@ -77,22 +77,34 @@
 
 .dateButtonsViewport {
   overflow: hidden;
-  width: 100%;
   flex: 1;
+  min-width: 0; /* Allow flex item to shrink below content size */
   position: relative;
 }
 
 .dateButtonsGrid {
   display: flex;
   gap: 8px;
-  width: 200%; /* 14 dates, showing 7 at a time (14/7 = 2) */
+  /* Width is set dynamically via inline style based on number of date buttons */
   flex-shrink: 0;
   will-change: transform;
+  /* Each page in the grid should be exactly the viewport width */
+  /* So if we have N pages, the grid is N * 100% of viewport */
 }
 
 .dateButton {
-  flex: 0 0 calc((100% - 104px) / 14); /* Grid is 200% of viewport, 14 buttons, 13 gaps of 8px = 104px total */
+  /* Each button should be 1/7 of the viewport width */
+  /* The grid is pages * 100% of viewport wide, so each button is (100% / pages) / 7 of grid width */
+  /* This equals 100% / 7 of viewport width, which is what we want */
+  /* Account for gaps: 6 gaps of 8px = 48px total between 7 buttons per page */
+  /* Since grid is pages * 100% wide, we need to divide by pages to get viewport-relative size */
+  /* Use CSS variable --total-pages to calculate: (100% / pages) / 7 of grid = 100% / 7 of viewport */
+  /* For gaps: 48px per page, so 48px / pages total, divided by 7 buttons = 48px / (pages * 7) */
+  /* Make buttons narrower by using a larger gap value to account for gaps, rounding issues, and container spacing */
+  /* Using 273px to make buttons fit properly (tested value) */
+  flex: 0 0 calc((100% / var(--total-pages, 1) - 273px / var(--total-pages, 1)) / 7);
   min-width: 0;
+  max-width: calc((100% / var(--total-pages, 1) - 273px / var(--total-pages, 1)) / 7);
   padding: 6px 8px;
   font-size: 13px;
   font-weight: 500;
@@ -454,7 +466,7 @@
   background-color: #ffffff;
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  padding: 16px 24px;
+  padding: 12px 24px;
 }
 
 .headerInner {
@@ -478,7 +490,7 @@
 }
 
 .logoImage {
-  max-height: 52px;
+  max-height: 60px;
   width: auto;
   object-fit: contain;
 }
@@ -528,8 +540,8 @@
 
 .userRoleBadge {
   font-size: 11px;
-  color: #ffffff;
-  background-color: #052333;
+  color: #052333;
+  background-color: var(--openactive-gold, #cda746);
   padding: 2px 8px;
   border-radius: 10px;
   margin-top: -4px;
@@ -655,6 +667,8 @@
   text-decoration: none;
   font-size: 14px;
   transition: background-color 0.2s;
+  cursor: pointer;
+  user-select: none;
 }
 
 .dropdownMenuItem:hover {
@@ -735,7 +749,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 4px solid #fbbf24;
+  border: 4px solid var(--openactive-gold, #cda746);
 }
 
 .rankingsProfileImage {
@@ -763,7 +777,7 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background-color: #fbbf24;
+  background-color: var(--openactive-gold, #cda746);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -975,7 +989,7 @@
   height: 64px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid #fbbf24;
+  border: 3px solid var(--openactive-gold, #cda746);
 }
 
 .rankingsMemberAvatarPlaceholder {
@@ -989,7 +1003,7 @@
   color: #ffffff;
   font-weight: 600;
   font-size: 20px;
-  border: 3px solid #fbbf24;
+  border: 3px solid var(--openactive-gold, #cda746);
 }
 
 .rankingsMemberInfo {
@@ -1049,7 +1063,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #fbbf24;
+  background: var(--openactive-gold, #cda746);
   cursor: pointer;
   border: none;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -1060,7 +1074,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #fbbf24;
+  background: var(--openactive-gold, #cda746);
   cursor: pointer;
   border: none;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);

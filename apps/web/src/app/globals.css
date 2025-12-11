@@ -46,6 +46,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* OpenActive Brand Colors */
+  --openactive-gold: #cda746;
 }
 
 @theme inline {

@@ -7,6 +7,7 @@ import { getSupabaseClientClient } from '@/lib/supabase';
 import { getClubCourts, SPORT_TYPE_LABELS, type Court } from '@/lib/courts';
 import { ClubAnimationProvider, useClubAnimation } from '@/components/club/ClubAnimationContext';
 import { getUserClubRole, type ClubRole } from '@/lib/club-roles';
+import { logError, logWarning, logDebug } from '@/lib/error-utils';
 import ClubHeader from '@/components/club/ClubHeader';
 import ClubFooter from '@/components/club/ClubFooter';
 import ClubNotifications from '@/components/club/ClubNotifications';
@@ -33,9 +34,13 @@ interface ClubPageClientProps {
   closingTime: string;
   bookingSlotInterval: number;
   sessionDuration: number[];
+  membersBookingDays: number;
+  visitorBookingDays: number;
+  coachBookingDays: number;
+  clubManagerBookingDays: number;
 }
 
-function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration }: ClubPageClientProps) {
+function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays }: ClubPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
@@ -61,7 +66,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
         const courtsData = await getClubCourts(supabase, club.id, false); // Only active courts
         setCourts(courtsData || []);
       } catch (err) {
-        console.error('Error loading courts:', err);
+        logError('ClubPageClient', err, { clubId: club.id, action: 'loadCourts' });
         setCourts([]);
       } finally {
         setIsLoadingCourts(false);
@@ -87,16 +92,15 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
     }));
   }, [courts, club?.numberOfCourts, club?.id]);
   
-  console.log('ClubPageClient received props:', { 
+  logDebug('ClubPageClient', 'Received props', { 
     hoverColor, 
     actionColor,
     bookingSlotInterval, 
     openingTime, 
     closingTime,
     selectedColor,
-    sessionDuration,
-    validSessionDuration,
-    courts: displayCourts
+    sessionDuration: validSessionDuration,
+    courtsCount: displayCourts.length
   });
   
   // Initialize selectedDate from URL params or default to today
@@ -178,7 +182,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
           .in('status', ['pending', 'confirmed']);
         
         if (error) {
-          console.error('Error loading bookings:', error);
+          logError('ClubPageClient', error, { clubId: club.id, selectedDate, action: 'loadBookings' });
           setBookings([]);
         } else {
           // Fetch player data separately
@@ -186,15 +190,12 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
             const players: Array<{ id?: string; name: string; isGuest: boolean; isPrimary: boolean }> = [];
             
             // Debug: Log the booking to see what we're working with
-            console.log('Processing booking:', {
+            logDebug('ClubPageClient', 'Processing booking', {
               id: booking.id,
               player1Id: booking.player1Id,
               player2Id: booking.player2Id,
               player3Id: booking.player3Id,
               player4Id: booking.player4Id,
-              guestPlayer1Name: booking.guestPlayer1Name,
-              guestPlayer2Name: booking.guestPlayer2Name,
-              guestPlayer3Name: booking.guestPlayer3Name,
               bookingType: booking.bookingType
             });
             
@@ -214,7 +215,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                 .in('id', playerIdsInOrder);
 
               if (playersError) {
-                console.error('Error fetching players:', playersError);
+                logError('ClubPageClient', playersError, { bookingId: booking.id, action: 'fetchPlayers' });
               }
 
               if (playersData) {
@@ -235,10 +236,10 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                           isPrimary: index === 0 || playerId === booking.userId // Primary player is player1 or the booker
                         });
                       } else {
-                        console.warn(`Player ${playerId} has no name (Firstname: ${playerData.Firstname}, Surname: ${playerData.Surname})`);
+                        logWarning('ClubPageClient', `Player ${playerId} has no name`, { playerId, Firstname: playerData.Firstname, Surname: playerData.Surname });
                       }
                     } else {
-                      console.warn(`Player ${playerId} not found in database`);
+                      logWarning('ClubPageClient', `Player ${playerId} not found in database`, { playerId });
                     }
                   }
                 });
@@ -269,7 +270,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
             }
             
             // Debug: Log final players array
-            console.log(`Booking ${booking.id} has ${players.length} players:`, players.map(p => p.name));
+            logDebug('ClubPageClient', `Booking ${booking.id} has ${players.length} players`, { bookingId: booking.id, playerCount: players.length, playerNames: players.map(p => p.name) });
             
             // Create a names string for backwards compatibility
             const playerNames = players.map(p => p.name).join(', ') || 'Booked';
@@ -284,7 +285,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
           setBookings(bookingsWithPlayers);
         }
       } catch (err) {
-        console.error('Error loading bookings:', err);
+        logError('ClubPageClient', err, { clubId: club.id, selectedDate, action: 'loadBookings' });
         setBookings([]);
       } finally {
         setIsLoadingBookings(false);
@@ -461,11 +462,11 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
     
     // Validate interval
     if (isNaN(interval) || interval <= 0) {
-      console.warn('Invalid interval, using default 60:', interval, bookingSlotInterval);
+      logWarning('ClubPageClient', 'Invalid interval, using default 60', { interval, bookingSlotInterval });
       interval = 60; // fallback to 60 minutes
     }
     
-    console.log('Time slot generation:', { openingTime, closingTime, bookingSlotInterval, interval, startMinutes, endMinutes });
+    logDebug('ClubPageClient', 'Time slot generation', { openingTime, closingTime, bookingSlotInterval, interval, startMinutes, endMinutes });
     
     for (let minutes = startMinutes; minutes < endMinutes; minutes += interval) {
       const hours = Math.floor(minutes / 60);
@@ -474,17 +475,43 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
       slots.push(time);
     }
     
-    console.log('Generated time slots:', slots);
+    logDebug('ClubPageClient', 'Generated time slots', { slotCount: slots.length, slots });
     return slots;
   }, [openingTime, closingTime, bookingSlotInterval]);
 
   const timeSlots = generateTimeSlots();
 
-  // Generate date buttons (next 14 days)
-  const generateDateButtons = () => {
+  // Determine the maximum booking days based on user role
+  const maxBookingDays = useMemo(() => {
+    if (!user || !userRole) {
+      // Not logged in - use visitor setting
+      return visitorBookingDays;
+    }
+    
+    if (isSuperAdmin || userRole === 'CLUB_ADMIN') {
+      // Super Admin and Club Manager use clubManagerBookingDays
+      return clubManagerBookingDays;
+    }
+    
+    if (userRole === 'COACH') {
+      return coachBookingDays;
+    }
+    
+    if (userRole === 'MEMBER') {
+      return membersBookingDays;
+    }
+    
+    // Default to visitor for VISITOR role or unknown roles
+    return visitorBookingDays;
+  }, [user, userRole, isSuperAdmin, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays]);
+
+  // Generate date buttons based on user's booking days limit
+  const generateDateButtons = useCallback(() => {
     const dates = [];
     const today = new Date();
-    for (let i = 0; i < 14; i++) {
+    // Use maxBookingDays + 1 to include today (day 0)
+    const totalDays = maxBookingDays + 1;
+    for (let i = 0; i < totalDays; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
       const dateString = date.toISOString().split('T')[0];
@@ -501,9 +528,19 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
       });
     }
     return dates;
-  };
+  }, [maxBookingDays]);
 
-  const dateButtons = useMemo(() => generateDateButtons(), []);
+  const dateButtons = useMemo(() => {
+    const buttons = generateDateButtons();
+    logDebug('ClubPageClient', 'Date buttons generated', {
+      count: buttons.length,
+      maxBookingDays,
+      userRole,
+      isSuperAdmin,
+      buttonDates: buttons.map(b => b.dateString)
+    });
+    return buttons;
+  }, [generateDateButtons, maxBookingDays, userRole, isSuperAdmin]);
 
 
   // Find the closest time to current time
@@ -616,10 +653,28 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                 ref={dateScrollContainerRef}
                 className={styles.dateButtonsGrid}
                 style={{
-                  transform: `translateX(-${dateScrollIndex * 50}%)`, /* Slide 50% of grid width = 7 dates (100% of viewport) */
-                  transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-                }}
+                  /* Calculate transform relative to viewport: each page is 100% of viewport, so slide by (100% / totalPages) * dateScrollIndex of grid width */
+                  transform: `translateX(calc(-${dateScrollIndex} * (100% / ${Math.ceil(dateButtons.length / 7)})))`,
+                  transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  width: `calc(100% * ${Math.ceil(dateButtons.length / 7)})`, /* Dynamic width: each page is 100% of viewport, so total is pages * 100% */
+                  '--total-pages': Math.ceil(dateButtons.length / 7) /* CSS variable for button width calculation */
+                } as React.CSSProperties & { '--total-pages': number }}
               >
+                {/* Debug: Show total buttons count */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div style={{ 
+                    position: 'absolute', 
+                    top: '-30px', 
+                    left: 0, 
+                    fontSize: '12px', 
+                    color: fontColor, 
+                    opacity: 0.7,
+                    zIndex: 1000,
+                    pointerEvents: 'none'
+                  }}>
+                    Total buttons: {dateButtons.length}, Pages: {Math.ceil(dateButtons.length / 7)}, Current page: {dateScrollIndex + 1}, Max booking days: {maxBookingDays}
+                  </div>
+                )}
                 {dateButtons.map((date) => (
               <button
                 key={date.dateString}

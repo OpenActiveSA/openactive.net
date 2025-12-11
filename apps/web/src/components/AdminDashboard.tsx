@@ -14,7 +14,9 @@ interface User {
   Firstname?: string;
   Surname?: string;
   role: string;
+  avatarUrl?: string;
   createdAt?: string;
+  clubMemberships?: Array<{ clubId: string; clubName: string; role: string }>;
 }
 
 type ClubStatus = 'ACTIVE_PAID' | 'ACTIVE_FREE' | 'FREE_TRIAL' | 'DISABLED';
@@ -34,6 +36,21 @@ interface Club {
   fontColor?: string;
   hoverColor?: string;
   createdAt?: string;
+  // Module settings
+  moduleCourtBooking?: boolean;
+  moduleMemberManager?: boolean;
+  moduleWebsite?: boolean;
+  moduleEmailers?: boolean;
+  moduleVisitorPayment?: boolean;
+  moduleFloodlightPayment?: boolean;
+  moduleEvents?: boolean;
+  moduleCoaching?: boolean;
+  moduleLeague?: boolean;
+  moduleRankings?: boolean;
+  moduleMarketing?: boolean;
+  moduleAccessControl?: boolean;
+  moduleClubWallet?: boolean;
+  moduleFinanceIntegration?: boolean;
 }
 
 export function AdminDashboard() {
@@ -46,6 +63,7 @@ export function AdminDashboard() {
   const [error, setError] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [currentUserAvatarUrl, setCurrentUserAvatarUrl] = useState<string | null>(null);
   const hasCheckedRole = useRef(false);
   const hasRedirected = useRef(false);
 
@@ -59,7 +77,7 @@ export function AdminDashboard() {
       // Load users
       const { data: usersData, error: usersError } = await supabase
         .from('Users')
-        .select('id, email, Firstname, Surname, role, createdAt')
+        .select('id, email, Firstname, Surname, role, avatarUrl, createdAt')
         .order('createdAt', { ascending: false });
 
       if (usersError) {
@@ -67,13 +85,75 @@ export function AdminDashboard() {
         throw new Error('Failed to load users');
       }
 
-      setUsers((usersData || []) as User[]);
+      // Load club memberships for all users
+      const { data: clubRolesData, error: clubRolesError } = await supabase
+        .from('UserClubRoles')
+        .select('userId, clubId, role')
+        .order('role');
+
+      if (clubRolesError) {
+        if (clubRolesError.code === '42P01') {
+          console.warn('UserClubRoles table does not exist yet');
+        } else {
+          console.error('Error loading club roles:', clubRolesError);
+        }
+      } else {
+        console.log('Loaded club roles:', clubRolesData?.length || 0, 'memberships');
+      }
+
+      // Load all clubs to get names
+      const { data: allClubs, error: clubsForMembershipsError } = await supabase
+        .from('Clubs')
+        .select('id, name');
+
+      if (clubsForMembershipsError) {
+        console.error('Error loading clubs for memberships:', clubsForMembershipsError);
+      }
+
+      // Create a map of clubId -> club name
+      const clubNameMap = new Map<string, string>();
+      if (allClubs) {
+        allClubs.forEach((club: any) => {
+          clubNameMap.set(club.id, club.name);
+        });
+      }
+
+      // Create a map of userId -> club memberships
+      const membershipsMap = new Map<string, Array<{ clubId: string; clubName: string; role: string }>>();
+      if (clubRolesData && clubRolesData.length > 0) {
+        clubRolesData.forEach((item: any) => {
+          const userId = item.userId;
+          const clubId = item.clubId;
+          const clubName = clubNameMap.get(clubId) || 'Unknown Club';
+          
+          if (!membershipsMap.has(userId)) {
+            membershipsMap.set(userId, []);
+          }
+          membershipsMap.get(userId)!.push({
+            clubId: clubId,
+            clubName: clubName,
+            role: item.role
+          });
+        });
+        console.log('Memberships map created with', membershipsMap.size, 'users');
+      }
+
+      // Add club memberships to users
+      const usersWithMemberships = (usersData || []).map((user: any) => ({
+        ...user,
+        clubMemberships: membershipsMap.get(user.id) || []
+      }));
+
+      setUsers(usersWithMemberships as User[]);
 
       // Load clubs - try with all fields first, fallback if columns don't exist
-      let clubsData, clubsError;
+      let clubsData: any = null;
+      let clubsError: any = null;
+      
+      // First attempt: with all columns
       const resultWithAll = await supabase
         .from('Clubs')
-        .select('id, name, country, province, is_active, status, logo, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
+        .select('id, name, country, province, is_active, status, logo, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleRankings, moduleMarketing, moduleAccessControl, moduleClubWallet, moduleFinanceIntegration, createdAt')
         .order('createdAt', { ascending: false });
       
       clubsData = resultWithAll.data;
@@ -134,7 +214,7 @@ export function AdminDashboard() {
       const supabase = getSupabaseClientClient();
       const { data, error } = await supabase
         .from('Users')
-        .select('role, Firstname, Surname')
+        .select('role, Firstname, Surname, avatarUrl')
         .eq('email', user.email)
         .eq('id', user.id)
         .maybeSingle();
@@ -156,6 +236,7 @@ export function AdminDashboard() {
 
       // User is authorized as SUPER_ADMIN
       setIsAuthorized(true);
+      setCurrentUserAvatarUrl(data.avatarUrl || null);
       loadDashboardData();
     } catch (err: any) {
       console.error('Exception checking user role:', err);
@@ -285,7 +366,33 @@ export function AdminDashboard() {
 
         <div className={styles.sidebarFooter}>
           <div className={styles.userInfo}>
-            <div className={styles.userAvatar}>{userName.charAt(0).toUpperCase()}</div>
+            {currentUserAvatarUrl ? (
+              <img
+                src={currentUserAvatarUrl}
+                alt={userName}
+                className={styles.userAvatar}
+                style={{
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  width: '40px',
+                  height: '40px'
+                }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const fallback = target.nextElementSibling as HTMLElement;
+                  if (fallback) {
+                    fallback.style.display = 'flex';
+                  }
+                }}
+              />
+            ) : null}
+            <div 
+              className={styles.userAvatar}
+              style={{ display: currentUserAvatarUrl ? 'none' : 'flex' }}
+            >
+              {userName.charAt(0).toUpperCase()}
+            </div>
             {!isSidebarCollapsed && (
               <div className={styles.userDetails}>
                 <div className={styles.userName}>{userName}</div>
@@ -442,12 +549,13 @@ function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
   };
 
   const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    if (!dateString) return '—';
+    try {
+      const date = new Date(dateString);
+      return date.getFullYear().toString();
+    } catch {
+      return '—';
+    }
   };
 
   return (
@@ -473,6 +581,7 @@ function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
                   <th>Club Name</th>
                   <th>Location</th>
                   <th>Courts</th>
+                  <th>Modules</th>
                   <th>Status</th>
                   <th>Created</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
@@ -485,7 +594,7 @@ function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
                       <span style={{ fontWeight: 500 }}>{club.name}</span>
                     </td>
                     <td>
-                      {[club.province, club.country].filter(Boolean).join(', ') || '—'}
+                      {club.province || '—'}
                     </td>
                     <td>
                       {isLoadingCourtCounts ? (
@@ -493,6 +602,38 @@ function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
                       ) : (
                         <span>{club.courtCount || 0}</span>
                       )}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxWidth: '300px' }}>
+                        {[
+                          { key: 'moduleCourtBooking', label: 'Booking', enabled: club.moduleCourtBooking ?? true },
+                          { key: 'moduleMemberManager', label: 'Members', enabled: club.moduleMemberManager ?? false },
+                          { key: 'moduleWebsite', label: 'Website', enabled: club.moduleWebsite ?? true },
+                          { key: 'moduleEmailers', label: 'Email', enabled: club.moduleEmailers ?? true },
+                          { key: 'modulePayments', label: 'Payments', enabled: (club.moduleVisitorPayment ?? true) || (club.moduleFloodlightPayment ?? true) },
+                          { key: 'moduleEvents', label: 'Events', enabled: club.moduleEvents ?? true },
+                          { key: 'moduleCoaching', label: 'Coaching', enabled: club.moduleCoaching ?? true },
+                          { key: 'moduleLeague', label: 'League', enabled: club.moduleLeague ?? true },
+                          { key: 'moduleAccessControl', label: 'Access Control', enabled: club.moduleAccessControl ?? true },
+                          { key: 'moduleFinanceIntegration', label: 'Finance', enabled: club.moduleFinanceIntegration ?? true },
+                        ].map((module) => (
+                          <span
+                            key={module.key}
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 6px',
+                              fontSize: '11px',
+                              backgroundColor: module.enabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(107, 114, 128, 0.2)',
+                              color: module.enabled ? '#6ee7b7' : 'rgba(255, 255, 255, 0.4)',
+                              borderRadius: '4px',
+                              fontWeight: 500
+                            }}
+                            title={module.label}
+                          >
+                            {module.label}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td>
                       <span className={getStatusBadgeClass(getClubStatus(club))}>
@@ -515,10 +656,6 @@ function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
                             gap: '6px'
                           }}
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                            <circle cx="12" cy="12" r="3"></circle>
-                          </svg>
                           View
                         </Link>
                         <Link 
@@ -532,10 +669,6 @@ function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
                             gap: '6px'
                           }}
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                          </svg>
                           Manage
                         </Link>
                       </div>
@@ -643,18 +776,23 @@ function AllUsersTab({ users, onRefresh }: { users: User[]; onRefresh: () => voi
         return `${styles.roleBadge} ${styles.roleManager}`;
       case 'MEMBER':
         return `${styles.roleBadge} ${styles.roleMember}`;
+      case 'COACH':
+        return `${styles.roleBadge} ${styles.roleMember}`;
+      case 'VISITOR':
+        return styles.roleBadge;
       default:
         return styles.roleBadge;
     }
   };
 
   const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    if (!dateString) return '—';
+    try {
+      const date = new Date(dateString);
+      return date.getFullYear().toString();
+    } catch {
+      return '—';
+    }
   };
 
   const filteredUsers = users.filter(
@@ -707,7 +845,7 @@ function AllUsersTab({ users, onRefresh }: { users: User[]; onRefresh: () => voi
               <tr>
                 <th>Name</th>
                 <th>Email</th>
-                <th>Role</th>
+                <th>Role / Club Memberships</th>
                 <th>Registered</th>
               </tr>
             </thead>
@@ -715,7 +853,31 @@ function AllUsersTab({ users, onRefresh }: { users: User[]; onRefresh: () => voi
               {filteredUsers.map((user) => (
                 <tr key={user.id}>
                   <td className={styles.userNameCell}>
-                    <div className={styles.userAvatarSmall}>
+                    {user.avatarUrl ? (
+                      <img
+                        src={user.avatarUrl}
+                        alt={user.Firstname && user.Surname ? `${user.Firstname} ${user.Surname}` : user.email || 'User'}
+                        className={styles.userAvatarSmall}
+                        style={{
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          width: '40px',
+                          height: '40px'
+                        }}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const fallback = target.nextElementSibling as HTMLElement;
+                          if (fallback) {
+                            fallback.style.display = 'flex';
+                          }
+                        }}
+                      />
+                    ) : null}
+                    <div 
+                      className={styles.userAvatarSmall}
+                      style={{ display: user.avatarUrl ? 'none' : 'flex' }}
+                    >
                       {(user.Firstname?.charAt(0) || user.email?.charAt(0) || 'U').toUpperCase()}
                     </div>
                     <span>
@@ -726,7 +888,26 @@ function AllUsersTab({ users, onRefresh }: { users: User[]; onRefresh: () => voi
                   </td>
                   <td className={styles.userEmail}>{user.email}</td>
                   <td>
-                    <span className={getRoleBadgeClass(user.role)}>{user.role.replace('_', ' ')}</span>
+                    {user.role === 'SUPER_ADMIN' ? (
+                      <span className={getRoleBadgeClass(user.role)}>{user.role.replace('_', ' ')}</span>
+                    ) : user.clubMemberships && user.clubMemberships.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {user.clubMemberships.map((membership, idx) => (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span className={getRoleBadgeClass(membership.role)}>
+                              {membership.role.replace('_', ' ')}
+                            </span>
+                            <span style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                              @ {membership.clubName}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic' }}>
+                        No club memberships
+                      </span>
+                    )}
                   </td>
                   <td className={styles.dateCell}>{formatDate(user.createdAt)}</td>
                 </tr>
@@ -773,6 +954,16 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const supabase = getSupabaseClientClient();
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '—';
+    try {
+      const date = new Date(dateString);
+      return date.getFullYear().toString();
+    } catch {
+      return '—';
+    }
+  };
 
   const getClubStatus = (club: Club): ClubStatus => {
     if (club.status) {
@@ -962,11 +1153,47 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
               <p className={styles.clubDescription}>
                 {club.numberOfCourts || 0} {club.numberOfCourts === 1 ? 'court' : 'courts'}
               </p>
-              {(club.country || club.province) && (
+              {club.province && (
                 <p className={styles.clubLocation} style={{ marginTop: '8px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.6)' }}>
-                  {[club.province, club.country].filter(Boolean).join(', ')}
+                  {club.province}
                 </p>
               )}
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  {[
+                    { key: 'moduleCourtBooking', label: 'Booking', enabled: club.moduleCourtBooking ?? true },
+                    { key: 'moduleMemberManager', label: 'Members', enabled: club.moduleMemberManager ?? false },
+                    { key: 'moduleWebsite', label: 'Website', enabled: club.moduleWebsite ?? true },
+                    { key: 'moduleEmailers', label: 'Email', enabled: club.moduleEmailers ?? true },
+                    { key: 'moduleVisitorPayment', label: 'Visitor Payment', enabled: club.moduleVisitorPayment ?? true },
+                    { key: 'moduleFloodlightPayment', label: 'Floodlight Payment', enabled: club.moduleFloodlightPayment ?? true },
+                    { key: 'moduleEvents', label: 'Events', enabled: club.moduleEvents ?? true },
+                    { key: 'moduleCoaching', label: 'Coaching', enabled: club.moduleCoaching ?? true },
+                    { key: 'moduleLeague', label: 'League', enabled: club.moduleLeague ?? true },
+                    { key: 'moduleRankings', label: 'Rankings', enabled: club.moduleRankings ?? true },
+                    { key: 'moduleMarketing', label: 'Marketing', enabled: club.moduleMarketing ?? true },
+                    { key: 'moduleAccessControl', label: 'Access Control', enabled: club.moduleAccessControl ?? true },
+                    { key: 'moduleClubWallet', label: 'Club Wallet', enabled: club.moduleClubWallet ?? true },
+                    { key: 'moduleFinanceIntegration', label: 'Finance', enabled: club.moduleFinanceIntegration ?? true },
+                  ].map((module) => (
+                    <span
+                      key={module.key}
+                      style={{
+                        display: 'inline-block',
+                        padding: '3px 8px',
+                        fontSize: '11px',
+                        backgroundColor: module.enabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(107, 114, 128, 0.2)',
+                        color: module.enabled ? '#6ee7b7' : 'rgba(255, 255, 255, 0.4)',
+                        borderRadius: '4px',
+                        fontWeight: 500
+                      }}
+                      title={module.label}
+                    >
+                      {module.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
               <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <Link 
@@ -975,20 +1202,12 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                      <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
                     View
                   </Link>
                   <Link 
                     href={`/admin/clubs/${club.id}/edit`}
                     className={styles.btnEdit}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
                     Edit
                   </Link>
                   <Link 
@@ -997,10 +1216,6 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
                     Manage
                   </Link>
                 </div>

@@ -263,6 +263,10 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
       if (currentPath.includes('/club/') && path === '/book') {
         return true;
       }
+      // Check if admin page is active
+      if (currentPath.includes('/admin') && path === '/admin') {
+        return true;
+      }
     }
     return pathname === path;
   };
@@ -282,7 +286,8 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
+        // Commented out for testing - keep menu open
+        // setShowDropdown(false);
       }
     };
 
@@ -323,7 +328,13 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
           pointerEvents: showDropdown ? 'auto' : 'none',
           visibility: showDropdown ? 'visible' : 'hidden'
         }}
-        onClick={() => setShowDropdown(false)}
+        onClick={(e) => {
+          // Only close if clicking directly on the backdrop, not on menu items
+          if (e.target === e.currentTarget) {
+            // Commented out for testing - keep menu open
+            // setShowDropdown(false);
+          }
+        }}
       />
       
       <header 
@@ -450,6 +461,29 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
               Rankings
             </Link>
           )}
+          {currentPath && currentPath.includes('/club/') && user && (userRole === 'SUPER_ADMIN' || userRole === 'CLUB_ADMIN') && (
+            <Link
+              href={`${currentPath.split('/').slice(0, 3).join('/')}/admin`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${styles.navLink} ${isActive('/admin') ? styles.navLinkActive : ''}`}
+              style={{
+                color: isActive('/admin') ? activeColor : undefined
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive('/admin')) {
+                  e.currentTarget.style.color = activeColor;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive('/admin')) {
+                  e.currentTarget.style.color = '#052333';
+                }
+              }}
+            >
+              Admin
+            </Link>
+          )}
         </nav>
 
         {/* User Name or Login Button - Right */}
@@ -464,7 +498,13 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
                   {getDisplayName()}
                 </div>
                 {userRole && (
-                  <div className={styles.userRoleBadge}>
+                  <div 
+                    className={styles.userRoleBadge}
+                    style={{
+                      backgroundColor: userRole === 'VISITOR' ? '#000000' : 'var(--openactive-gold, #cda746)',
+                      color: userRole === 'VISITOR' ? '#ffffff' : '#052333'
+                    }}
+                  >
                     {userRole === 'SUPER_ADMIN' ? 'Super Admin' : 
                      userRole === 'CLUB_ADMIN' ? 'Club Manager' :
                      userRole === 'COACH' ? 'Coach' :
@@ -478,6 +518,9 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
               <div
                 className={styles.profilePictureContainer}
                 onClick={() => setShowDropdown(!showDropdown)}
+                style={{
+                  borderColor: userRole === 'VISITOR' ? '#000000' : (userRole === 'MEMBER' || userRole === 'SUPER_ADMIN' ? 'var(--openactive-gold, #cda746)' : undefined)
+                }}
               >
                 {userAvatar ? (
                   <img 
@@ -556,19 +599,27 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
         <div className={styles.dropdownCloseButtonContainer}>
           <button
             className={styles.dropdownCloseButton}
-            onClick={() => setShowDropdown(false)}
+            onClick={() => {
+              setShowDropdown(false);
+            }}
           >
             ✕
           </button>
         </div>
         
         {/* Menu Items Container */}
-        <div className={styles.dropdownMenuItems}>
+        <div className={styles.dropdownMenuItems} onClick={(e) => e.stopPropagation()}>
           {currentPath && currentPath.includes('/club/') ? (
             <Link 
               href={`${currentPath.split('/').slice(0, 3).join('/')}/profile`}
               className={styles.dropdownMenuItem}
-              onClick={() => setShowDropdown(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                router.push(`${currentPath.split('/').slice(0, 3).join('/')}/profile`);
+                // Keep menu open for testing
+                // setShowDropdown(false);
+              }}
             >
               <span className={styles.dropdownMenuItemIcon}>👤</span>
               <span className={styles.dropdownMenuItemText}>My Profile</span>
@@ -577,7 +628,13 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             <Link 
               href="/profile" 
               className={styles.dropdownMenuItem}
-              onClick={() => setShowDropdown(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                router.push('/profile');
+                // Keep menu open for testing
+                // setShowDropdown(false);
+              }}
             >
               <span className={styles.dropdownMenuItemIcon}>👤</span>
               <span className={styles.dropdownMenuItemText}>My Profile</span>
@@ -589,7 +646,16 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
               ? `${currentPath.split('/').slice(0, 3).join('/')}/matches`
               : '/matches'} 
             className={styles.dropdownMenuItem}
-            onClick={() => setShowDropdown(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const href = currentPath && currentPath.includes('/club/') 
+                ? `${currentPath.split('/').slice(0, 3).join('/')}/matches`
+                : '/matches';
+              router.push(href);
+              // Keep menu open for testing
+              // setShowDropdown(false);
+            }}
           >
             <span className={styles.dropdownMenuItemIcon}>🏆</span>
             <span className={styles.dropdownMenuItemText}>Manage Matches</span>
@@ -599,7 +665,13 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             <Link 
               href={`${currentPath.split('/').slice(0, 3).join('/')}/events`}
               className={styles.dropdownMenuItem}
-              onClick={() => setShowDropdown(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                router.push(`${currentPath.split('/').slice(0, 3).join('/')}/events`);
+                // Keep menu open for testing
+                // setShowDropdown(false);
+              }}
             >
               <span className={styles.dropdownMenuItemIcon}>📅</span>
               <span className={styles.dropdownMenuItemText}>Events</span>
@@ -610,7 +682,13 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             <Link 
               href={`${currentPath.split('/').slice(0, 3).join('/')}/members`}
               className={styles.dropdownMenuItem}
-              onClick={() => setShowDropdown(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                router.push(`${currentPath.split('/').slice(0, 3).join('/')}/members`);
+                // Keep menu open for testing
+                // setShowDropdown(false);
+              }}
             >
               <span className={styles.dropdownMenuItemIcon}>👥</span>
               <span className={styles.dropdownMenuItemText}>Club Members</span>
@@ -622,7 +700,16 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
               ? `${currentPath.split('/').slice(0, 3).join('/')}/documents`
               : '/documents'} 
             className={styles.dropdownMenuItem}
-            onClick={() => setShowDropdown(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const href = currentPath && currentPath.includes('/club/') 
+                ? `${currentPath.split('/').slice(0, 3).join('/')}/documents`
+                : '/documents';
+              router.push(href);
+              // Keep menu open for testing
+              // setShowDropdown(false);
+            }}
           >
             <span className={styles.dropdownMenuItemIcon}>📄</span>
             <span className={styles.dropdownMenuItemText}>Club Documents</span>
@@ -633,7 +720,16 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
               ? `${currentPath.split('/').slice(0, 3).join('/')}/finance`
               : '/finance'} 
             className={styles.dropdownMenuItem}
-            onClick={() => setShowDropdown(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const href = currentPath && currentPath.includes('/club/') 
+                ? `${currentPath.split('/').slice(0, 3).join('/')}/finance`
+                : '/finance';
+              router.push(href);
+              // Keep menu open for testing
+              // setShowDropdown(false);
+            }}
           >
             <span className={styles.dropdownMenuItemIcon}>💰</span>
             <span className={styles.dropdownMenuItemText}>Finance</span>
@@ -643,7 +739,13 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             <Link 
               href={`${currentPath.split('/').slice(0, 3).join('/')}/rankings`}
               className={styles.dropdownMenuItem}
-              onClick={() => setShowDropdown(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                router.push(`${currentPath.split('/').slice(0, 3).join('/')}/rankings`);
+                // Keep menu open for testing
+                // setShowDropdown(false);
+              }}
             >
               <span className={styles.dropdownMenuItemIcon}>📊</span>
               <span className={styles.dropdownMenuItemText}>Ranking</span>
@@ -652,11 +754,23 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
           
           <div 
             className={styles.dropdownMenuItem}
+            role="button"
+            tabIndex={0}
             style={{
               borderTop: '1px solid rgba(0, 0, 0, 0.1)',
               marginTop: '8px'
             }}
-            onClick={handleSwitchClub}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSwitchClub();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleSwitchClub();
+              }
+            }}
           >
             <span className={styles.dropdownMenuItemIcon}>🔄</span>
             <span className={styles.dropdownMenuItemText}>Switch Club</span>
@@ -667,7 +781,16 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
               ? `${currentPath.split('/').slice(0, 3).join('/')}/help`
               : '/help'} 
             className={styles.dropdownMenuItem}
-            onClick={() => setShowDropdown(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const href = currentPath && currentPath.includes('/club/') 
+                ? `${currentPath.split('/').slice(0, 3).join('/')}/help`
+                : '/help';
+              router.push(href);
+              // Keep menu open for testing
+              // setShowDropdown(false);
+            }}
           >
             <span className={styles.dropdownMenuItemIcon}>❓</span>
             <span className={styles.dropdownMenuItemText}>Help</span>
@@ -678,7 +801,11 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             target="_blank"
             rel="noopener noreferrer"
             className={styles.dropdownMenuItem}
-            onClick={() => setShowDropdown(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              // For external links, keep menu open for testing
+              // setShowDropdown(false);
+            }}
           >
             <span className={styles.dropdownMenuItemIcon}>🛒</span>
             <span className={styles.dropdownMenuItemText}>Tennis Shop</span>
@@ -686,6 +813,8 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
           
           <div 
             className={styles.dropdownMenuItem}
+            role="button"
+            tabIndex={0}
             style={{
               color: '#dc2626',
               fontWeight: '500'
@@ -696,7 +825,17 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = 'transparent';
             }}
-            onClick={handleLogout}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleLogout();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleLogout();
+              }
+            }}
           >
             <span className={styles.dropdownMenuItemIcon}>🚪</span>
             <span className={styles.dropdownMenuItemText}>Log out</span>

@@ -137,7 +137,7 @@ function ClubMembersContent({ slug, clubSettings }: ClubMembersClientProps) {
   const getRoleLabel = (role: ClubRole): string => {
     switch (role) {
       case 'MEMBER':
-        return 'Player';
+        return 'Member';
       case 'VISITOR':
         return 'Guest';
       case 'COACH':
@@ -145,7 +145,7 @@ function ClubMembersContent({ slug, clubSettings }: ClubMembersClientProps) {
       case 'CLUB_ADMIN':
         return 'Club Manager';
       default:
-        return 'Player';
+        return 'Member';
     }
   };
 
@@ -154,28 +154,28 @@ function ClubMembersContent({ slug, clubSettings }: ClubMembersClientProps) {
     switch (role) {
       case 'MEMBER':
         return {
-          backgroundColor: '#fbbf24', // Gold
-          color: '#052333'
+          backgroundColor: '#cda746', // OpenActive Gold
+          color: '#ffffff'
         };
       case 'VISITOR':
         return {
-          backgroundColor: '#052333', // Dark blue
+          backgroundColor: '#000000', // Black
           color: '#ffffff'
         };
       case 'COACH':
         return {
-          backgroundColor: '#fbbf24', // Gold
-          color: '#052333'
+          backgroundColor: '#cda746', // OpenActive Gold
+          color: '#ffffff'
         };
       case 'CLUB_ADMIN':
         return {
-          backgroundColor: '#fbbf24', // Gold
-          color: '#052333'
+          backgroundColor: '#cda746', // OpenActive Gold
+          color: '#ffffff'
         };
       default:
         return {
-          backgroundColor: '#fbbf24',
-          color: '#052333'
+          backgroundColor: '#cda746', // OpenActive Gold
+          color: '#ffffff'
         };
     }
   };

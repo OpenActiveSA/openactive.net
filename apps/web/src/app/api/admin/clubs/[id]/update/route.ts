@@ -108,6 +108,42 @@ export async function PUT(
         updateData.coachBookingDays = days;
       }
     }
+    if (body.clubManagerBookingDays !== undefined) {
+      const days = typeof body.clubManagerBookingDays === 'number' 
+        ? body.clubManagerBookingDays 
+        : (body.clubManagerBookingDays !== null && body.clubManagerBookingDays !== undefined ? parseInt(String(body.clubManagerBookingDays), 10) : null);
+      // Allow 0 and positive numbers (0 means they can only book today)
+      if (days !== null && !isNaN(days) && days >= 0) {
+        updateData.clubManagerBookingDays = days;
+        console.log('Setting clubManagerBookingDays to:', days);
+      } else {
+        console.log('clubManagerBookingDays validation failed:', { days, bodyValue: body.clubManagerBookingDays });
+      }
+    }
+
+    // Add module settings
+    const moduleFields = [
+      'moduleCourtBooking',
+      'moduleMemberManager',
+      'moduleWebsite',
+      'moduleEmailers',
+      'moduleVisitorPayment',
+      'moduleFloodlightPayment',
+      'moduleEvents',
+      'moduleCoaching',
+      'moduleLeague',
+      'moduleRankings',
+      'moduleMarketing',
+      'moduleAccessControl',
+      'moduleClubWallet',
+      'moduleFinanceIntegration',
+    ];
+
+    moduleFields.forEach((field) => {
+      if (body[field] !== undefined) {
+        updateData[field] = Boolean(body[field]);
+      }
+    });
 
     // Perform the update - try with all fields first
     console.log('Updating club with data:', JSON.stringify(updateData, null, 2));
@@ -139,6 +175,7 @@ export async function PUT(
         membersBookingDays: _________,
         visitorBookingDays: __________,
         coachBookingDays: ___________,
+        clubManagerBookingDays: ____________,
         ...basicUpdateData 
       } = updateData;
       // Keep logo in basicUpdateData if it was provided

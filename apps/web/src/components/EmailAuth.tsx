@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseClientClient } from '@/lib/supabase';
+import { logError, logWarning, logDebug, parseApiErrorResponse, extractErrorMessage } from '@/lib/error-utils';
 import styles from './EmailAuth.module.css';
 
 export function EmailAuth() {
@@ -45,7 +46,7 @@ export function EmailAuth() {
     setError('');
     
     try {
-      console.log('[EmailAuth] Checking if user exists:', emailToCheck.toLowerCase().trim());
+      logDebug('EmailAuth', 'Checking if user exists', { email: emailToCheck.toLowerCase().trim() });
       
       // Check if user exists in Users table
       const { data, error } = await supabase
@@ -57,18 +58,13 @@ export function EmailAuth() {
       if (error) {
         if (error.code === 'PGRST116') {
           // PGRST116 means no rows returned, which is fine
-          console.log('[EmailAuth] User not found in Users table, going to register');
+          logDebug('EmailAuth', 'User not found in Users table, going to register', { email: emailToCheck });
           setStep('register');
           return;
         }
         
         // Real error - log it
-        console.error('[EmailAuth] Error checking user:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-        });
+        logError('EmailAuth', error, { email: emailToCheck, action: 'checkIfUserExists' });
         // Default to register if error
         setStep('register');
         return;
@@ -76,7 +72,7 @@ export function EmailAuth() {
 
       // If user exists in Users table, check if they also exist in auth.users
       if (data) {
-        console.log('[EmailAuth] User found in Users table, checking auth...');
+        logDebug('EmailAuth', 'User found in Users table, checking auth', { email: emailToCheck });
         // Try to sign in with a dummy password to check if auth account exists
         // This will fail but tell us if the user exists in auth
         const { error: authError } = await supabase.auth.signInWithPassword({
@@ -89,10 +85,10 @@ export function EmailAuth() {
         // If error is "User not found", user doesn't exist in auth
         if (authError) {
           if (authError.message?.includes('Invalid login') || authError.message?.includes('Email not confirmed') || authError.message?.includes('not found') === false) {
-            console.log('[EmailAuth] User exists in auth, going to login');
+            logDebug('EmailAuth', 'User exists in auth, going to login', { email: emailToCheck });
             setStep('login');
           } else {
-            console.log('[EmailAuth] User exists in Users but not in auth, going to register (will likely fail)');
+            logDebug('EmailAuth', 'User exists in Users but not in auth, going to register', { email: emailToCheck });
             setStep('register');
             setError('An account with this email exists but is not properly set up. Please contact support.');
           }
@@ -101,14 +97,11 @@ export function EmailAuth() {
           setStep('login');
         }
       } else {
-        console.log('[EmailAuth] User not found, going to register');
+        logDebug('EmailAuth', 'User not found, going to register', { email: emailToCheck });
         setStep('register');
       }
     } catch (err: any) {
-      console.error('[EmailAuth] Exception checking if user exists:', {
-        message: err?.message || String(err),
-        stack: err?.stack,
-      });
+      logError('EmailAuth', err, { email: emailToCheck, action: 'checkIfUserExists' });
       // Default to register on error (safer - allows new signups)
       setStep('register');
     } finally {
@@ -154,7 +147,7 @@ export function EmailAuth() {
               .update({ lastLoginAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
               .eq('id', data.user.id.toString());
           } catch (err) {
-            console.error('Error updating last login:', err);
+            logError('EmailAuth', err, { userId: data.user.id, action: 'updateLastLogin' });
             // Don't fail login if this fails
           }
           
@@ -175,7 +168,7 @@ export function EmailAuth() {
               router.push('/clubs');
             }
           } catch (err) {
-            console.error('Error checking user role:', err);
+            logError('EmailAuth', err, { userId: data.user.id, action: 'checkUserRole' });
             // Default to clubs list page if role check fails
             router.push('/clubs');
           }
@@ -207,7 +200,7 @@ export function EmailAuth() {
         let signUpData, signUpError;
         
           try {
-            console.log('Creating account via API route...');
+            logDebug('EmailAuth', 'Creating account via API route', { email: email.trim() });
             
             // Use API route to create user with service role (bypasses trigger)
             let apiResponse;
@@ -226,7 +219,7 @@ export function EmailAuth() {
                 }),
               });
             } catch (fetchError: any) {
-              console.error('Network error calling API route:', fetchError);
+              logError('EmailAuth', fetchError, { email: email.trim(), action: 'fetchRegisterAPI' });
               throw new Error(`Network error: ${fetchError.message || 'Failed to connect to server'}`);
             }
 
@@ -234,42 +227,27 @@ export function EmailAuth() {
             throw new Error('No response from server');
           }
 
-          // Read response as text first
-          const responseText = await apiResponse.text();
-          console.log('=== API RESPONSE DEBUG ===');
-          console.log('Status:', apiResponse.status);
-          console.log('Status Text:', apiResponse.statusText);
-          console.log('OK:', apiResponse.ok);
-          console.log('Response Text Length:', responseText?.length || 0);
-          console.log('Response Text:', responseText || '(empty)');
-          console.log('==========================');
-          
+          // Parse response first
           let apiData: any = null;
-          if (responseText) {
-            try {
+          try {
+            const responseText = await apiResponse.text();
+            if (responseText) {
               apiData = JSON.parse(responseText);
-              console.log('Parsed API Data:', apiData);
-            } catch (parseError: any) {
-              console.error('Failed to parse API response as JSON:', parseError);
-              console.error('Response text that failed to parse:', responseText);
-              throw new Error(`Server returned invalid JSON (${apiResponse.status}): ${responseText.substring(0, 200)}`);
             }
-          } else {
-            console.warn('Empty response body from API route');
-            apiData = {};
+          } catch (parseError) {
+            logError('EmailAuth', parseError, { email: email.trim(), action: 'parseRegisterResponse' });
+            throw new Error('Failed to parse server response');
           }
-          
+
+          // Check if response is an error
           if (!apiResponse.ok) {
-            const errorInfo = {
+            const { error: apiErrorMessage, details } = await parseApiErrorResponse(apiResponse);
+            logError('EmailAuth', new Error(apiErrorMessage), { 
+              email: email.trim(), 
               status: apiResponse.status,
-              statusText: apiResponse.statusText,
-              responseText: responseText || '(empty)',
-              parsedData: apiData,
-              hasData: !!apiData,
-              dataKeys: apiData ? Object.keys(apiData) : [],
-              dataType: typeof apiData
-            };
-            console.error('API route error response:', errorInfo);
+              details,
+              action: 'registerAPI' 
+            });
             
             // Check if user already exists
             if (apiData?.error?.includes('already exists') || 
@@ -281,11 +259,8 @@ export function EmailAuth() {
             }
             
             // Show detailed error message
-            const errorMessage = apiData?.details || apiData?.error || 'Failed to create account';
-            const errorHint = apiData?.hint ? ` ${apiData.hint}` : '';
-            const fullError = `${errorMessage}${errorHint}`;
-            console.error('Registration error:', fullError);
-            throw new Error(fullError);
+            const finalErrorMessage = extractErrorMessage(details || apiData || {});
+            throw new Error(finalErrorMessage);
           }
 
           // Sign in with the newly created account
@@ -302,9 +277,9 @@ export function EmailAuth() {
           signUpData = signInData;
           signUpError = null;
         } catch (apiError: any) {
-          console.error('API route registration failed:', apiError);
+          logError('EmailAuth', apiError, { email: email.trim(), action: 'registerAPI' });
           signUpError = apiError;
-          setError(apiError.message || 'There was an issue creating your account. Please try again or contact support.');
+          setError(extractErrorMessage(apiError) || 'There was an issue creating your account. Please try again or contact support.');
           return;
         }
 
@@ -366,7 +341,7 @@ export function EmailAuth() {
               .eq('id', data.user.id.toString());
             
             if (usersError) {
-              console.warn('Error updating Users table, trying User table:', usersError);
+              logWarning('EmailAuth', 'Error updating Users table, trying User table', { error: usersError, userId: data.user.id });
               // Try User table as fallback
               await supabase
                 .from('User')
@@ -374,7 +349,7 @@ export function EmailAuth() {
                 .eq('id', data.user.id.toString());
             }
           } catch (err) {
-            console.error('Error updating user profile:', err);
+            logError('EmailAuth', err, { userId: data.user.id, action: 'updateUserProfile' });
             // Don't fail registration if this fails - the trigger should have created the user
           }
           
@@ -395,7 +370,7 @@ export function EmailAuth() {
               router.push('/clubs');
             }
           } catch (err) {
-            console.error('Error checking user role:', err);
+            logError('EmailAuth', err, { action: 'checkUserRoleAfterRegister' });
             // Default to clubs list page if role check fails
             router.push('/clubs');
           }
@@ -403,8 +378,8 @@ export function EmailAuth() {
         }
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
-      setError(err.message || 'Something went wrong. Please try again.');
+      logError('EmailAuth', err, { action: 'handleSubmit' });
+      setError(extractErrorMessage(err) || 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -478,7 +453,7 @@ export function EmailAuth() {
 
       // If user-avatars bucket doesn't exist, try club-images as fallback
       if (uploadError && (uploadError.message.includes('Bucket not found') || uploadError.message.includes('not found'))) {
-        console.warn('user-avatars bucket not found, trying club-images as fallback');
+        logWarning('EmailAuth', 'user-avatars bucket not found, trying club-images as fallback', { userId });
         bucketName = 'club-images';
         const fallbackResult = await supabase.storage
           .from('club-images')
@@ -491,7 +466,7 @@ export function EmailAuth() {
       }
 
       if (uploadError) {
-        console.error('Error uploading profile photo:', uploadError);
+        logError('EmailAuth', uploadError, { userId, action: 'uploadProfilePhoto' });
         return null;
       }
 
@@ -502,7 +477,7 @@ export function EmailAuth() {
 
       return urlData?.publicUrl || null;
     } catch (err) {
-      console.error('Error uploading profile photo:', err);
+      logError('EmailAuth', err, { userId, action: 'uploadProfilePhoto' });
       return null;
     } finally {
       setIsUploadingPhoto(false);
