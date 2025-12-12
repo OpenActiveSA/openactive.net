@@ -71,6 +71,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
     reason: string;
     recurring: 'none' | 'daily' | 'weekly';
     recurringDays?: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    disabledDates?: string[]; // Array of dates (YYYY-MM-DD) to exclude from recurring rules
     status: 'active' | 'pause';
     setting: 'blocked' | 'blocked-coaching' | 'blocked-tournament' | 'blocked-maintenance' | 'blocked-social' | 'members-only' | 'members-only-bookings' | 'open-doubles-singles' | 'doubles-only' | 'singles-only';
   }>>([]);
@@ -86,6 +87,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
     reason: string;
     recurring: 'none' | 'daily' | 'weekly';
     recurringDays?: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    disabledDates?: string[]; // Array of dates (YYYY-MM-DD) to exclude from recurring rules
     status: 'active' | 'pause';
     setting: 'blocked' | 'blocked-coaching' | 'blocked-tournament' | 'blocked-maintenance' | 'blocked-social' | 'members-only' | 'members-only-bookings' | 'open-doubles-singles' | 'doubles-only' | 'singles-only';
   } | null>(null);
@@ -446,6 +448,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
           reason: rule.reason || '',
           recurring: rule.recurring || 'none',
           recurringDays: rule.recurringDays || rule.recurring_days || [],
+          disabledDates: rule.disabledDates || rule.disabled_dates || [],
           status: rule.status || 'active',
           setting: rule.setting || 'blocked'
         }));
@@ -2369,6 +2372,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                       reason: '',
                       recurring: 'none' as const,
                       recurringDays: [],
+                      disabledDates: [],
                       status: 'active' as const,
                       setting: 'blocked' as const
                     });
@@ -2845,6 +2849,143 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                         </div>
                       )}
 
+                      {editingRule.recurring === 'weekly' && editingRule.startDate && editingRule.endDate && editingRule.recurringDays && editingRule.recurringDays.length > 0 && (() => {
+                        // Generate all occurrences of selected days between startDate and endDate
+                        const generateDayOccurrences = (startDateStr: string, endDateStr: string, selectedDays: number[]) => {
+                          // Parse date string (YYYY-MM-DD) to avoid timezone issues
+                          const parseDateStr = (dateStr: string): Date => {
+                            const [year, month, day] = dateStr.split('-').map(Number);
+                            return new Date(year, month - 1, day, 0, 0, 0, 0); // Local time, not UTC
+                          };
+                          
+                          // Format date as YYYY-MM-DD (local time, no timezone conversion)
+                          const formatDateStr = (date: Date): string => {
+                            const year = date.getFullYear();
+                            const month = String(date.getMonth() + 1).padStart(2, '0');
+                            const day = String(date.getDate()).padStart(2, '0');
+                            return `${year}-${month}-${day}`;
+                          };
+                          
+                          const start = parseDateStr(startDateStr);
+                          const end = parseDateStr(endDateStr);
+                          const occurrences: Array<{ date: string; dateObj: Date; label: string }> = [];
+                          
+                          const currentDate = new Date(start);
+                          end.setHours(23, 59, 59, 999);
+                          
+                          // Format date: "Fri, Jan 5"
+                          const formatDate = (date: Date) => {
+                            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                            return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+                          };
+                          
+                          while (currentDate <= end) {
+                            const dayOfWeek = currentDate.getDay();
+                            if (selectedDays.includes(dayOfWeek)) {
+                              const dateStr = formatDateStr(currentDate); // Use local time formatting
+                              occurrences.push({
+                                date: dateStr,
+                                dateObj: new Date(currentDate),
+                                label: formatDate(currentDate)
+                              });
+                            }
+                            currentDate.setDate(currentDate.getDate() + 1);
+                          }
+                          
+                          return occurrences;
+                        };
+                        
+                        const occurrences = generateDayOccurrences(
+                          editingRule.startDate, 
+                          editingRule.endDate, 
+                          editingRule.recurringDays
+                        );
+                        const disabledDates = editingRule.disabledDates || [];
+                        
+                        // Toggle individual date
+                        const toggleDate = (dateStr: string) => {
+                          const newDisabledDates = [...disabledDates];
+                          const isDisabled = disabledDates.includes(dateStr);
+                          
+                          if (isDisabled) {
+                            // Remove from disabled dates
+                            const index = newDisabledDates.indexOf(dateStr);
+                            if (index > -1) {
+                              newDisabledDates.splice(index, 1);
+                            }
+                          } else {
+                            // Add to disabled dates
+                            if (!newDisabledDates.includes(dateStr)) {
+                              newDisabledDates.push(dateStr);
+                            }
+                          }
+                          
+                          setEditingRule({ ...editingRule, disabledDates: newDisabledDates });
+                        };
+                        
+                        // Get day name(s) for label
+                        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        const selectedDayNames = editingRule.recurringDays
+                          .map(day => dayNames[day])
+                          .join(', ');
+                        
+                        return occurrences.length > 0 ? (
+                          <div className={adminStyles.formRow}>
+                            <label className={adminStyles.formLabel}>Disable {selectedDayNames}:</label>
+                            <div style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              gap: '8px', 
+                              flex: 1,
+                              maxHeight: '200px',
+                              overflowY: 'auto',
+                              padding: '8px',
+                              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(255, 255, 255, 0.1)'
+                            }}>
+                              {occurrences.map((occurrence) => {
+                                const isDisabled = disabledDates.includes(occurrence.date);
+                                return (
+                                  <button
+                                    key={occurrence.date}
+                                    type="button"
+                                    onClick={() => toggleDate(occurrence.date)}
+                                    style={{
+                                      padding: '8px 12px',
+                                      backgroundColor: isDisabled
+                                        ? 'rgba(239, 68, 68, 0.2)'
+                                        : 'rgba(255, 255, 255, 0.05)',
+                                      border: `1px solid ${isDisabled
+                                        ? 'rgba(239, 68, 68, 0.3)'
+                                        : 'rgba(255, 255, 255, 0.2)'}`,
+                                      borderRadius: '4px',
+                                      color: isDisabled ? '#ef4444' : 'rgba(255, 255, 255, 0.7)',
+                                      cursor: 'pointer',
+                                      fontSize: '13px',
+                                      textAlign: 'left',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center'
+                                    }}
+                                  >
+                                    <span>{occurrence.label}</span>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: isDisabled ? '600' : '400'
+                                    }}>
+                                      {isDisabled ? 'Disabled' : 'Active'}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+
                       <div className={adminStyles.formRow}>
                         <label className={adminStyles.formLabel}>Reason (optional):</label>
                         <textarea
@@ -2892,6 +3033,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                                 reason: editingRule.reason,
                                 recurring: editingRule.recurring,
                                 recurringDays: editingRule.recurringDays || [],
+                                disabledDates: editingRule.disabledDates || [],
                                 status: editingRule.status,
                                 setting: editingRule.setting
                               };

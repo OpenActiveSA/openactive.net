@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS "ScheduleRules" (
     "reason" TEXT,
     "recurring" "ScheduleRuleRecurring" NOT NULL DEFAULT 'none',
     "recurringDays" INTEGER[], -- Array of day numbers (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+    "disabledDates" TEXT[], -- Array of dates (YYYY-MM-DD) to exclude from recurring rules (for breaks/vacations)
     "status" "ScheduleRuleStatus" NOT NULL DEFAULT 'active',
     "setting" "ScheduleRuleSetting" NOT NULL DEFAULT 'blocked',
     

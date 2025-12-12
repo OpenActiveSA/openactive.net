@@ -100,12 +100,28 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
         }
 
         if (rulesData) {
+          // Log raw data from database for debugging
+          console.log('[ClubPageClient] 📦 Raw rules data from database:', rulesData.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            disabledDates: r.disabledDates,
+            disabled_dates: r.disabled_dates,
+            hasDisabledDates: !!r.disabledDates,
+            hasDisabled_dates: !!r.disabled_dates
+          })));
+          
           const mappedRules = rulesData.map((rule: any) => {
             // Ensure recurringDays are numbers
             let recurringDays = rule.recurringDays || rule.recurring_days || [];
             if (Array.isArray(recurringDays) && recurringDays.length > 0) {
               recurringDays = recurringDays.map((d: any) => typeof d === 'string' ? parseInt(d, 10) : d);
             }
+            
+            const disabledDates = (() => {
+              const dates = rule.disabledDates || rule.disabled_dates || [];
+              // Ensure all dates are strings in YYYY-MM-DD format
+              return Array.isArray(dates) ? dates.map((d: any) => String(d).trim()) : [];
+            })();
             
             return {
               id: rule.id,
@@ -117,11 +133,26 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
               endTime: rule.endTime || rule.end_time || '23:59',
               recurring: rule.recurring || 'none',
               recurringDays: recurringDays,
+              disabledDates: disabledDates,
               status: rule.status || 'active',
               setting: rule.setting || 'blocked'
             };
           });
           logDebug('ClubPageClient', 'Loaded schedule rules', { rules: mappedRules });
+          
+          // Log rules with disabled dates for debugging
+          const rulesWithDisabledDates = mappedRules.filter(r => r.disabledDates && r.disabledDates.length > 0);
+          if (rulesWithDisabledDates.length > 0) {
+            console.log('[ClubPageClient] ✅ Loaded rules with disabled dates:', rulesWithDisabledDates.map(r => ({
+              id: r.id,
+              name: r.name,
+              disabledDates: r.disabledDates,
+              disabledDatesCount: r.disabledDates.length
+            })));
+          } else {
+            console.log('[ClubPageClient] ⚠️ No rules with disabled dates found. Total rules:', mappedRules.length);
+          }
+          
           setScheduleRules(mappedRules);
         }
       } catch (err) {
@@ -200,6 +231,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
     endTime: string;
     recurring: 'none' | 'daily' | 'weekly';
     recurringDays?: number[];
+    disabledDates?: string[];
     status: 'active' | 'pause';
     setting: string;
   }>>([]);
@@ -489,7 +521,12 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
       dayName: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][selectedDayOfWeek],
       time,
       selectedTimeMinutes,
-      rulesCount: scheduleRules.length
+      rulesCount: scheduleRules.length,
+      rulesWithDisabledDates: scheduleRules.filter(r => r.disabledDates && r.disabledDates.length > 0).map(r => ({
+        id: r.id,
+        name: r.name,
+        disabledDates: r.disabledDates
+      }))
     });
 
     // Check each active schedule rule
@@ -553,6 +590,30 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
         }
       } else if (rule.recurring === 'daily') {
         // Daily rule: check if time matches
+        const disabledDates = rule.disabledDates || [];
+        // Normalize date string to ensure format matches (YYYY-MM-DD)
+        const selectedDateStr = String(date).trim();
+        
+        logDebug('ClubPageClient', 'Checking daily rule', {
+          ruleName: rule.name,
+          selectedDateStr,
+          disabledDates: disabledDates,
+          disabledDatesCount: disabledDates.length,
+          isDateDisabled: disabledDates.includes(selectedDateStr)
+        });
+        
+        // Check if this specific date is disabled (normalize all dates for comparison)
+        const normalizedDisabledDates = disabledDates.map((d: string) => String(d).trim());
+        if (normalizedDisabledDates.includes(selectedDateStr)) {
+          logDebug('ClubPageClient', 'Date is disabled for daily rule - skipping', { 
+            ruleName: rule.name, 
+            selectedDate: selectedDateStr,
+            disabledDates: disabledDates,
+            normalizedDisabledDates: normalizedDisabledDates
+          });
+          continue;
+        }
+        
         if (selectedTimeMinutes >= ruleStartTimeMinutes && selectedTimeMinutes < ruleEndTimeMinutes) {
           logDebug('ClubPageClient', 'Court blocked by daily rule', { ruleName: rule.name });
           return rule;
@@ -560,13 +621,46 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
       } else if (rule.recurring === 'weekly') {
         // Weekly rule: check if day of week matches and time matches
         const ruleDays = rule.recurringDays || [];
+        const disabledDates = rule.disabledDates || [];
+        // Normalize date string to ensure format matches (YYYY-MM-DD)
+        const selectedDateStr = String(date).trim();
+        
+        // Check if this specific date is disabled (normalize all dates for comparison)
+        const normalizedDisabledDates = disabledDates.map((d: string) => String(d).trim());
+        const isDateDisabled = normalizedDisabledDates.includes(selectedDateStr);
+        
+        // IMPORTANT: Check disabled dates FIRST, before any other checks
+        console.log('[ClubPageClient] 🔍 Checking disabled dates for rule:', rule.name, {
+          selectedDate: selectedDateStr,
+          disabledDates: disabledDates,
+          normalizedDisabledDates: normalizedDisabledDates,
+          isDateDisabled: isDateDisabled,
+          comparison: `Looking for "${selectedDateStr}" in [${normalizedDisabledDates.map(d => `"${d}"`).join(', ')}]`
+        });
+        
+        if (isDateDisabled) {
+          console.log('[ClubPageClient] ⚠️ Date is DISABLED for weekly rule - SKIPPING', { 
+            ruleName: rule.name, 
+            selectedDate: selectedDateStr,
+            disabledDates: disabledDates,
+            normalizedDisabledDates: normalizedDisabledDates
+          });
+          continue;
+        }
+        
         logDebug('ClubPageClient', 'Checking weekly rule', {
           ruleName: rule.name,
           ruleDays,
           selectedDayOfWeek,
+          selectedDateStr,
+          disabledDates: disabledDates,
+          normalizedDisabledDates: normalizedDisabledDates,
+          disabledDatesCount: disabledDates.length,
+          isDateDisabled: isDateDisabled,
           dayMatches: ruleDays.includes(selectedDayOfWeek),
           timeMatches: selectedTimeMinutes >= ruleStartTimeMinutes && selectedTimeMinutes < ruleEndTimeMinutes
         });
+        
         if (ruleDays.includes(selectedDayOfWeek) && 
             selectedTimeMinutes >= ruleStartTimeMinutes && 
             selectedTimeMinutes < ruleEndTimeMinutes) {
