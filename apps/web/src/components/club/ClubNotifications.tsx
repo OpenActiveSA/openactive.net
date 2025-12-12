@@ -79,7 +79,9 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
 
         const newNotifications: Notification[] = [];
         // Show a single notification if any rankings are missing
-        if (missingCategories.length > 0) {
+        // But don't show ranking notifications on the rankings page itself
+        const isOnRankingsPage = pathname?.includes('/rankings');
+        if (missingCategories.length > 0 && !isOnRankingsPage) {
           newNotifications.push({
             id: 'ranking_missing',
             message: `You haven't set your starting rank yet.`,
@@ -98,7 +100,7 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
     if (clubId && user?.id) {
       loadNotifications();
     }
-  }, [clubId, user?.id]);
+  }, [clubId, user?.id, pathname]);
 
   // If no notifications, trigger content visibility after header animation
   useEffect(() => {

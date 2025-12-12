@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
 import { getSupabaseClientClient } from '@/lib/supabase';
-import { type ClubRole } from '@/lib/club-roles';
+import { type ClubRole, getUserClubRole } from '@/lib/club-roles';
 import { useAuth } from '@/lib/auth-context';
 import { ClubAnimationProvider, useClubAnimation } from '@/components/club/ClubAnimationContext';
 import ClubHeader from '@/components/club/ClubHeader';
@@ -61,6 +61,9 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
   });
   const [rankings, setRankings] = useState<Map<string, UserRanking>>(new Map());
   const [isSavingRanking, setIsSavingRanking] = useState<boolean>(false);
+  const [userRole, setUserRole] = useState<ClubRole | 'SUPER_ADMIN' | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [showStartRankingSection, setShowStartRankingSection] = useState(false);
   
   const minRanking = 3;
   const maxRanking = 7;
@@ -73,16 +76,22 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
     { value: 'MIXED', label: 'Mixed' }
   ];
 
-  // Load user avatar and name
+  // Load user avatar, name, and role
   useEffect(() => {
     const loadUserData = async () => {
-      if (!user?.id) return;
+      if (!user?.id || !clubSettings.id) {
+        setUserRole(null);
+        setIsSuperAdmin(false);
+        return;
+      }
       
       try {
         const supabase = getSupabaseClientClient();
+        
+        // Check if user is SUPER_ADMIN (global role in Users table)
         const { data: userData } = await supabase
           .from('Users')
-          .select('avatarUrl, Firstname, Surname')
+          .select('role, avatarUrl, Firstname, Surname')
           .eq('id', user.id)
           .maybeSingle();
         
@@ -95,16 +104,33 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
             ? `${userData.Firstname} ${userData.Surname}`
             : userData.Firstname || userData.Surname || user.email?.split('@')[0] || '';
           setUserName(name);
+          
+          // Check if user is SUPER_ADMIN
+          if (userData.role === 'SUPER_ADMIN') {
+            setIsSuperAdmin(true);
+            setUserRole('SUPER_ADMIN');
+            return;
+          }
         }
+        
+        // Get user's club role
+        const clubRole = await getUserClubRole(supabase, user.id, clubSettings.id);
+        setUserRole(clubRole);
+        setIsSuperAdmin(false);
       } catch (err) {
         console.error('Error loading user data:', err);
+        setUserRole(null);
+        setIsSuperAdmin(false);
       }
     };
     
-    if (user?.id) {
+    if (user?.id && clubSettings.id) {
       loadUserData();
+    } else {
+      setUserRole(null);
+      setIsSuperAdmin(false);
     }
-  }, [user?.id, user?.email]);
+  }, [user?.id, user?.email, clubSettings.id]);
 
   // Load rankings for the selected category
   useEffect(() => {
@@ -147,8 +173,11 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
           if (userRanking) {
             setHasSetRanking(true);
             setStartRanking(userRanking.startingRanking);
+            setShowStartRankingSection(false);
           } else {
             setHasSetRanking(false);
+            // Trigger animation after a short delay when section becomes visible
+            setTimeout(() => setShowStartRankingSection(true), 100);
           }
         }
       } catch (err) {
@@ -364,8 +393,8 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
         </div>
       ) : (
         <>
-          {/* Set Your Start Ranking Section */}
-          {!hasSetRanking && (
+          {/* Set Your Start Ranking Section - Only show for logged-in members, club managers, or super admins */}
+          {!hasSetRanking && user?.id && userRole && (userRole === 'MEMBER' || userRole === 'CLUB_ADMIN' || isSuperAdmin) && showStartRankingSection && (
             <div className={styles.rankingsStartSection}>
               {/* Circular Image with Ranking Number */}
               <div className={styles.rankingsProfileContainer}>
@@ -490,6 +519,7 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
                     }
 
                     setHasSetRanking(true);
+                    setShowStartRankingSection(false);
                     
                     // Reload rankings to update the display
                     const { data: rankingsData } = await supabase
@@ -538,6 +568,7 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
                 onChange={(e) => {
                   setSelectedCategory(e.target.value as RankingCategory);
                   setHasSetRanking(false); // Reset until we load the new category's rankings
+                  setShowStartRankingSection(false); // Reset animation state
                 }}
                 className={styles.rankingsCategorySelect}
                 style={{ color: clubSettings.fontColor }}
