@@ -86,3 +86,4 @@ After running the migration:
 - Default values are set for all columns
 - Existing data is preserved
 
+

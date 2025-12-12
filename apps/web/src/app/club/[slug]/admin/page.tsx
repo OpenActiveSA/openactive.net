@@ -59,6 +59,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
   const [openingTime, setOpeningTime] = useState<string>('06:00');
   const [closingTime, setClosingTime] = useState<string>('22:00');
   const [isSaving, setIsSaving] = useState(false);
+  const [courts, setCourts] = useState<Array<{ id: string; name: string; courtNumber: number }>>([]);
   const [scheduleRules, setScheduleRules] = useState<Array<{
     id: string;
     name: string;
@@ -73,6 +74,7 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
     status: 'active' | 'pause';
     setting: 'blocked' | 'blocked-coaching' | 'blocked-tournament' | 'blocked-maintenance' | 'blocked-social' | 'members-only' | 'members-only-bookings' | 'open-doubles-singles' | 'doubles-only' | 'singles-only';
   }>>([]);
+  const [scheduleRulesTableExists, setScheduleRulesTableExists] = useState<boolean | null>(null); // null = unknown, true = exists, false = doesn't exist
   const [editingRule, setEditingRule] = useState<{
     id: string | null;
     name: string;
@@ -325,6 +327,165 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
       setIsLoading(false);
     }
   }, [slug, club]);
+
+  // Load courts for the club
+  const loadCourts = useCallback(async () => {
+    if (!club?.id) return;
+
+    try {
+      const supabase = getSupabaseClientClient();
+      
+      // Try with courtNumber first, fallback to just name if column doesn't exist
+      let courtsData, courtsError;
+      const result = await supabase
+        .from('Courts')
+        .select('id, name, courtNumber')
+        .eq('clubId', club.id)
+        .eq('isActive', true);
+      
+      courtsData = result.data;
+      courtsError = result.error;
+
+      // If courtNumber column doesn't exist, try without it
+      if (courtsError && (courtsError.code === '42703' || courtsError.message?.includes('courtNumber'))) {
+        const fallbackResult = await supabase
+          .from('Courts')
+          .select('id, name')
+          .eq('clubId', club.id)
+          .eq('isActive', true);
+        
+        courtsData = fallbackResult.data;
+        courtsError = fallbackResult.error;
+      }
+
+      if (courtsError) {
+        console.warn('Error loading courts:', courtsError);
+        return;
+      }
+
+      if (courtsData && courtsData.length > 0) {
+        // Map to include courtNumber (extract from name if not in database)
+        const mappedCourts = courtsData.map((court: any) => {
+          let courtNumber = court.courtNumber;
+          if (!courtNumber && court.name) {
+            // Extract number from name like "Court 1" -> 1
+            const match = court.name.match(/\d+/);
+            courtNumber = match ? parseInt(match[0], 10) : 0;
+          }
+          return {
+            id: court.id,
+            name: court.name,
+            courtNumber: courtNumber || 0
+          };
+        }).sort((a, b) => a.courtNumber - b.courtNumber); // Sort by court number
+        setCourts(mappedCourts);
+      } else {
+        // No courts found, set empty array
+        setCourts([]);
+      }
+    } catch (err) {
+      console.error('Error loading courts:', err);
+    }
+  }, [club?.id]);
+
+  // Load courts when club is loaded
+  useEffect(() => {
+    if (club?.id) {
+      loadCourts();
+    }
+  }, [club?.id, loadCourts]);
+
+  // Load schedule rules for the club
+  const loadScheduleRules = useCallback(async () => {
+    if (!club?.id) return;
+
+    try {
+      const supabase = getSupabaseClientClient();
+      
+      // Try to load from ScheduleRules table
+      const { data: rulesData, error: rulesError } = await supabase
+        .from('ScheduleRules')
+        .select('*')
+        .eq('clubId', club.id)
+        .order('createdAt', { ascending: false });
+
+      if (rulesError) {
+        // If table doesn't exist (42P01) or relation doesn't exist, that's okay - rules will be empty
+        const errorCode = rulesError.code || '';
+        const errorMessage = rulesError.message || '';
+        
+        if (errorCode === '42P01' || errorMessage.includes('does not exist') || errorMessage.includes('relation') || errorMessage.includes('table')) {
+          // Table doesn't exist - set flag and return
+          setScheduleRulesTableExists(false);
+          return;
+        }
+        
+        // For other errors, log them
+        console.warn('Error loading schedule rules (non-fatal):', {
+          message: errorMessage,
+          code: errorCode,
+          details: rulesError.details || null,
+          hint: rulesError.hint || null,
+        });
+        return;
+      }
+
+      // Table exists and query succeeded
+      setScheduleRulesTableExists(true);
+
+      if (rulesData) {
+        // Map database format to component format
+        const mappedRules = rulesData.map((rule: any) => ({
+          id: rule.id,
+          name: rule.name || '',
+          courts: rule.courts || [],
+          startDate: rule.startDate || rule.start_date || '',
+          endDate: rule.endDate || rule.end_date || '',
+          startTime: rule.startTime || rule.start_time || '00:00',
+          endTime: rule.endTime || rule.end_time || '23:59',
+          reason: rule.reason || '',
+          recurring: rule.recurring || 'none',
+          recurringDays: rule.recurringDays || rule.recurring_days || [],
+          status: rule.status || 'active',
+          setting: rule.setting || 'blocked'
+        }));
+        setScheduleRules(mappedRules);
+      }
+    } catch (err: any) {
+      // Enhanced error logging
+      const errorInfo: any = {
+        message: err?.message || 'Unknown error',
+        name: err?.name || 'Unknown',
+        stack: err?.stack || null,
+      };
+      
+      // Try to stringify the error
+      try {
+        errorInfo.stringified = JSON.stringify(err, Object.getOwnPropertyNames(err));
+      } catch (e) {
+        errorInfo.stringified = String(err);
+      }
+      
+      // Try to get all keys
+      try {
+        if (err && typeof err === 'object') {
+          errorInfo.keys = Object.keys(err);
+          errorInfo.errorType = typeof err;
+        }
+      } catch (e) {
+        // Ignore
+      }
+      
+      console.error('Error loading schedule rules (catch block):', errorInfo);
+    }
+  }, [club?.id]);
+
+  // Load schedule rules when club is loaded or when schedule-rules tab is active
+  useEffect(() => {
+    if (club?.id && activeTab === 'schedule-rules') {
+      loadScheduleRules();
+    }
+  }, [club?.id, activeTab, loadScheduleRules]);
 
   useEffect(() => {
     if (authLoading) {
@@ -2222,6 +2383,30 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
               </div>
               
               <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Database Setup Warning */}
+                {scheduleRulesTableExists === false && (
+                  <div style={{
+                    padding: '16px 20px',
+                    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                    border: '1px solid rgba(251, 191, 36, 0.3)',
+                    borderRadius: '8px',
+                    color: '#fbbf24',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ fontWeight: 600, fontSize: '16px' }}>
+                      ⚠️ Database Table Not Found
+                    </div>
+                    <div style={{ fontSize: '14px', color: 'rgba(251, 191, 36, 0.9)' }}>
+                      The ScheduleRules table has not been created yet. Rules will be saved locally only and will be lost on page refresh.
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'rgba(251, 191, 36, 0.8)', marginTop: '4px' }}>
+                      To enable persistent storage, run the SQL migration file: <code style={{ backgroundColor: 'rgba(0, 0, 0, 0.2)', padding: '2px 6px', borderRadius: '4px' }}>CREATE_SCHEDULE_RULES_TABLE.sql</code> in your Supabase SQL Editor.
+                    </div>
+                  </div>
+                )}
+
                 {/* Rules Table */}
                 {scheduleRules.length === 0 && !editingRule ? (
                   <div style={{ 
@@ -2308,7 +2493,29 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                                     Edit
                                   </button>
                                   <button
-                                    onClick={() => setScheduleRules(scheduleRules.filter(r => r.id !== rule.id))}
+                                    onClick={async () => {
+                                      try {
+                                        const supabase = getSupabaseClientClient();
+                                        const { error } = await supabase
+                                          .from('ScheduleRules')
+                                          .delete()
+                                          .eq('id', rule.id);
+
+                                        if (error) {
+                                          console.error('Error deleting schedule rule:', error);
+                                        }
+                                        // Update local state regardless of database result
+                                        setScheduleRules(prevRules => prevRules.filter(r => r.id !== rule.id));
+                                        // Reload from database if table exists
+                                        if (scheduleRulesTableExists) {
+                                          await loadScheduleRules();
+                                        }
+                                      } catch (err) {
+                                        console.error('Error deleting schedule rule:', err);
+                                        // Update local state on error
+                                        setScheduleRules(prevRules => prevRules.filter(r => r.id !== rule.id));
+                                      }
+                                    }}
                                     style={{
                                       padding: '6px 12px',
                                       backgroundColor: 'transparent',
@@ -2410,32 +2617,65 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                       <div className={adminStyles.formRow}>
                         <label className={adminStyles.formLabel}>Courts:</label>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-                          {Array.from({ length: club?.numberOfCourts || 1 }, (_, i) => i + 1).map((courtNum) => (
-                            <button
-                              key={courtNum}
-                              onClick={() => {
-                                const newCourts = editingRule.courts.includes(courtNum)
-                                  ? editingRule.courts.filter(c => c !== courtNum)
-                                  : [...editingRule.courts, courtNum];
-                                setEditingRule({ ...editingRule, courts: newCourts });
-                              }}
-                              style={{
-                                padding: '8px 16px',
-                                backgroundColor: editingRule.courts.includes(courtNum) 
-                                  ? 'rgba(102, 126, 234, 0.2)' 
-                                  : 'rgba(255, 255, 255, 0.05)',
-                                border: `1px solid ${editingRule.courts.includes(courtNum) 
-                                  ? '#667eea' 
-                                  : 'rgba(255, 255, 255, 0.2)'}`,
-                                borderRadius: '4px',
-                                color: editingRule.courts.includes(courtNum) ? '#ffffff' : 'rgba(255, 255, 255, 0.7)',
-                                cursor: 'pointer',
-                                fontSize: '14px'
-                              }}
-                            >
-                              Court {courtNum}
-                            </button>
-                          ))}
+                          {courts.length > 0 ? (
+                            courts.map((court) => {
+                              const courtNum = court.courtNumber || parseInt(court.name.match(/\d+/)?.[0] || '0', 10);
+                              return (
+                                <button
+                                  key={court.id}
+                                  onClick={() => {
+                                    const newCourts = editingRule.courts.includes(courtNum)
+                                      ? editingRule.courts.filter(c => c !== courtNum)
+                                      : [...editingRule.courts, courtNum];
+                                    setEditingRule({ ...editingRule, courts: newCourts });
+                                  }}
+                                  style={{
+                                    padding: '8px 16px',
+                                    backgroundColor: editingRule.courts.includes(courtNum) 
+                                      ? 'rgba(102, 126, 234, 0.2)' 
+                                      : 'rgba(255, 255, 255, 0.05)',
+                                    border: `1px solid ${editingRule.courts.includes(courtNum) 
+                                      ? '#667eea' 
+                                      : 'rgba(255, 255, 255, 0.2)'}`,
+                                    borderRadius: '4px',
+                                    color: editingRule.courts.includes(courtNum) ? '#ffffff' : 'rgba(255, 255, 255, 0.7)',
+                                    cursor: 'pointer',
+                                    fontSize: '14px'
+                                  }}
+                                >
+                                  {court.name}
+                                </button>
+                              );
+                            })
+                          ) : (
+                            // Fallback if no courts loaded
+                            Array.from({ length: club?.numberOfCourts || 1 }, (_, i) => i + 1).map((courtNum) => (
+                              <button
+                                key={courtNum}
+                                onClick={() => {
+                                  const newCourts = editingRule.courts.includes(courtNum)
+                                    ? editingRule.courts.filter(c => c !== courtNum)
+                                    : [...editingRule.courts, courtNum];
+                                  setEditingRule({ ...editingRule, courts: newCourts });
+                                }}
+                                style={{
+                                  padding: '8px 16px',
+                                  backgroundColor: editingRule.courts.includes(courtNum) 
+                                    ? 'rgba(102, 126, 234, 0.2)' 
+                                    : 'rgba(255, 255, 255, 0.05)',
+                                  border: `1px solid ${editingRule.courts.includes(courtNum) 
+                                    ? '#667eea' 
+                                    : 'rgba(255, 255, 255, 0.2)'}`,
+                                  borderRadius: '4px',
+                                  color: editingRule.courts.includes(courtNum) ? '#ffffff' : 'rgba(255, 255, 255, 0.7)',
+                                  cursor: 'pointer',
+                                  fontSize: '14px'
+                                }}
+                              >
+                                Court {courtNum}
+                              </button>
+                            ))
+                          )}
                         </div>
                       </div>
 
@@ -2468,26 +2708,74 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <div className={adminStyles.formRow}>
                           <label className={adminStyles.formLabel}>Start Time:</label>
-                          <input
-                            type="time"
-                            value={editingRule.startTime}
-                            onChange={(e) => {
-                              setEditingRule({ ...editingRule, startTime: e.target.value });
-                            }}
-                            className={adminStyles.formInput}
-                          />
+                          <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+                            <select
+                              value={editingRule.startTime.split(':')[0] || '00'}
+                              onChange={(e) => {
+                                const hours = e.target.value;
+                                const minutes = editingRule.startTime.split(':')[1] || '00';
+                                setEditingRule({ ...editingRule, startTime: `${hours}:${minutes}` });
+                              }}
+                              className={adminStyles.formSelect}
+                              style={{ flex: 1 }}
+                            >
+                              {Array.from({ length: 24 }, (_, i) => i).map((hour) => (
+                                <option key={hour} value={String(hour).padStart(2, '0')}>
+                                  {String(hour).padStart(2, '0')}
+                                </option>
+                              ))}
+                            </select>
+                            <span style={{ color: 'rgba(255, 255, 255, 0.7)', alignSelf: 'center' }}>:</span>
+                            <select
+                              value={editingRule.startTime.split(':')[1] || '00'}
+                              onChange={(e) => {
+                                const hours = editingRule.startTime.split(':')[0] || '00';
+                                const minutes = e.target.value;
+                                setEditingRule({ ...editingRule, startTime: `${hours}:${minutes}` });
+                              }}
+                              className={adminStyles.formSelect}
+                              style={{ flex: 1 }}
+                            >
+                              <option value="00">00</option>
+                              <option value="30">30</option>
+                            </select>
+                          </div>
                         </div>
 
                         <div className={adminStyles.formRow}>
                           <label className={adminStyles.formLabel}>End Time:</label>
-                          <input
-                            type="time"
-                            value={editingRule.endTime}
-                            onChange={(e) => {
-                              setEditingRule({ ...editingRule, endTime: e.target.value });
-                            }}
-                            className={adminStyles.formInput}
-                          />
+                          <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+                            <select
+                              value={editingRule.endTime.split(':')[0] || '00'}
+                              onChange={(e) => {
+                                const hours = e.target.value;
+                                const minutes = editingRule.endTime.split(':')[1] || '00';
+                                setEditingRule({ ...editingRule, endTime: `${hours}:${minutes}` });
+                              }}
+                              className={adminStyles.formSelect}
+                              style={{ flex: 1 }}
+                            >
+                              {Array.from({ length: 24 }, (_, i) => i).map((hour) => (
+                                <option key={hour} value={String(hour).padStart(2, '0')}>
+                                  {String(hour).padStart(2, '0')}
+                                </option>
+                              ))}
+                            </select>
+                            <span style={{ color: 'rgba(255, 255, 255, 0.7)', alignSelf: 'center' }}>:</span>
+                            <select
+                              value={editingRule.endTime.split(':')[1] || '00'}
+                              onChange={(e) => {
+                                const hours = editingRule.endTime.split(':')[0] || '00';
+                                const minutes = e.target.value;
+                                setEditingRule({ ...editingRule, endTime: `${hours}:${minutes}` });
+                              }}
+                              className={adminStyles.formSelect}
+                              style={{ flex: 1 }}
+                            >
+                              <option value="00">00</option>
+                              <option value="30">30</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
 
@@ -2587,22 +2875,130 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
                           Cancel
                         </button>
                         <button
-                          onClick={() => {
-                            if (!editingRule) return;
+                          onClick={async () => {
+                            if (!editingRule || !club?.id) return;
                             
-                            if (editingRule.id) {
-                              // Update existing rule
-                              const ruleId = editingRule.id;
-                              setScheduleRules(scheduleRules.map(r => 
-                                r.id === ruleId 
-                                  ? { ...editingRule, id: ruleId } 
-                                  : r
-                              ));
-                            } else {
-                              // Add new rule
-                              setScheduleRules([...scheduleRules, { ...editingRule, id: Date.now().toString() }]);
+                            try {
+                              const supabase = getSupabaseClientClient();
+                              
+                              const ruleData = {
+                                clubId: club.id,
+                                name: editingRule.name,
+                                courts: editingRule.courts,
+                                startDate: editingRule.startDate,
+                                endDate: editingRule.endDate,
+                                startTime: editingRule.startTime,
+                                endTime: editingRule.endTime,
+                                reason: editingRule.reason,
+                                recurring: editingRule.recurring,
+                                recurringDays: editingRule.recurringDays || [],
+                                status: editingRule.status,
+                                setting: editingRule.setting
+                              };
+
+                              if (editingRule.id) {
+                                // Update existing rule
+                                const { data, error } = await supabase
+                                  .from('ScheduleRules')
+                                  .update(ruleData)
+                                  .eq('id', editingRule.id)
+                                  .select()
+                                  .single();
+
+                                if (error) {
+                                  const errorCode = error.code || '';
+                                  const errorMessage = error.message || '';
+                                  
+                                  // If table doesn't exist, just use local state
+                                  if (errorCode === '42P01' || errorMessage.includes('does not exist') || errorMessage.includes('relation') || errorMessage.includes('table')) {
+                                    console.log('ScheduleRules table does not exist. Updating local state only.');
+                                    const ruleId = editingRule.id;
+                                    setScheduleRules(prevRules => prevRules.map(r => 
+                                      r.id === ruleId 
+                                        ? { ...editingRule, id: ruleId } 
+                                        : r
+                                    ));
+                                    setEditingRule(null);
+                                    return;
+                                  }
+                                  
+                                  console.error('Error updating schedule rule:', {
+                                    message: errorMessage,
+                                    code: errorCode,
+                                    details: error.details || null,
+                                    hint: error.hint || null,
+                                  });
+                                  // Fallback to local state update if database update fails
+                                  const ruleId = editingRule.id;
+                                  setScheduleRules(prevRules => prevRules.map(r => 
+                                    r.id === ruleId 
+                                      ? { ...editingRule, id: ruleId } 
+                                      : r
+                                  ));
+                                } else {
+                                  // Successfully updated - reload rules from database to ensure consistency
+                                  await loadScheduleRules();
+                                }
+                              } else {
+                                // Add new rule
+                                const { data, error } = await supabase
+                                  .from('ScheduleRules')
+                                  .insert(ruleData)
+                                  .select()
+                                  .single();
+
+                                if (error) {
+                                  const errorCode = error.code || '';
+                                  const errorMessage = error.message || '';
+                                  
+                                  // If table doesn't exist, just use local state
+                                  if (errorCode === '42P01' || errorMessage.includes('does not exist') || errorMessage.includes('relation') || errorMessage.includes('table')) {
+                                    console.log('ScheduleRules table does not exist. Saving to local state only.');
+                                    setScheduleRules(prevRules => [...prevRules, { ...editingRule, id: Date.now().toString() }]);
+                                    setEditingRule(null);
+                                    return;
+                                  }
+                                  
+                                  console.error('Error creating schedule rule:', {
+                                    message: errorMessage,
+                                    code: errorCode,
+                                    details: error.details || null,
+                                    hint: error.hint || null,
+                                  });
+                                  // Fallback to local state update if database insert fails
+                                  setScheduleRules(prevRules => [...prevRules, { ...editingRule, id: Date.now().toString() }]);
+                                } else {
+                                  // Successfully created - reload rules from database to ensure consistency
+                                  await loadScheduleRules();
+                                }
+                              }
+                              setEditingRule(null);
+                            } catch (err: any) {
+                              console.error('Error saving schedule rule (catch block):', {
+                                message: err?.message || 'Unknown error',
+                                name: err?.name || 'Unknown',
+                                stack: err?.stack || null,
+                                stringified: (() => {
+                                  try {
+                                    return JSON.stringify(err, Object.getOwnPropertyNames(err));
+                                  } catch {
+                                    return String(err);
+                                  }
+                                })()
+                              });
+                              // Fallback to local state update on error
+                              if (editingRule.id) {
+                                const ruleId = editingRule.id;
+                                setScheduleRules(prevRules => prevRules.map(r => 
+                                  r.id === ruleId 
+                                    ? { ...editingRule, id: ruleId } 
+                                    : r
+                                ));
+                              } else {
+                                setScheduleRules(prevRules => [...prevRules, { ...editingRule, id: Date.now().toString() }]);
+                              }
+                              setEditingRule(null);
                             }
-                            setEditingRule(null);
                           }}
                           className={styles.btnPrimary}
                           style={{ minWidth: '120px' }}

@@ -49,10 +49,7 @@ interface Club {
   moduleEvents?: boolean;
   moduleCoaching?: boolean;
   moduleLeague?: boolean;
-  moduleRankings?: boolean;
-  moduleMarketing?: boolean;
   moduleAccessControl?: boolean;
-  moduleClubWallet?: boolean;
   moduleFinanceIntegration?: boolean;
 }
 
@@ -121,11 +118,10 @@ export default function EditClubPage({ params }: EditClubProps) {
     moduleEvents: true,
     moduleCoaching: true,
     moduleLeague: true,
-    moduleRankings: true,
-    moduleMarketing: true,
     moduleAccessControl: true,
-    moduleClubWallet: true,
     moduleFinanceIntegration: true,
+    // Combined Payments module (controls both Visitor Payment and Floodlight Payment)
+    modulePayments: true,
   });
   
   // Court management state
@@ -202,10 +198,10 @@ export default function EditClubPage({ params }: EditClubProps) {
       // Try to fetch with all columns first, if that fails, try without branding columns or status
       let data, fetchError;
       
-      // First attempt: with all columns including branding and status
+      // First attempt: with all columns including branding, status, and module settings
       const result = await supabase
         .from('Clubs')
-        .select('id, name, country, province, is_active, status, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
+        .select('id, name, country, province, is_active, status, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleAccessControl, moduleFinanceIntegration, createdAt')
         .eq('id', id)
         .single();
       
@@ -214,12 +210,12 @@ export default function EditClubPage({ params }: EditClubProps) {
 
       // If error and it's about missing columns, try without status first (status might not exist)
       if (fetchError && (fetchError.code === '42703' || fetchError.message?.includes('column'))) {
-        // First try without status column (most common missing column)
+        // Check if it's the status column that's missing
         if (fetchError.message?.includes('status')) {
           console.warn('Status column does not exist, loading without it:', fetchError);
           const fallbackResult = await supabase
             .from('Clubs')
-            .select('id, name, country, province, is_active, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
+            .select('id, name, country, province, is_active, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleAccessControl, moduleFinanceIntegration, createdAt')
             .eq('id', id)
             .single();
           
@@ -227,17 +223,32 @@ export default function EditClubPage({ params }: EditClubProps) {
           fetchError = fallbackResult.error;
         }
         
+        // If still error and it's about module columns, try without module settings
+        if (fetchError && (fetchError.code === '42703' || fetchError.message?.includes('column'))) {
+          if (fetchError.message?.includes('module')) {
+            console.warn('Some module columns may not exist, trying without them:', fetchError);
+            const fallbackResult2 = await supabase
+              .from('Clubs')
+              .select('id, name, country, province, is_active, logo, backgroundImage, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, createdAt')
+              .eq('id', id)
+              .single();
+            
+            data = fallbackResult2.data;
+            fetchError = fallbackResult2.error;
+          }
+        }
+        
         // If still error, try with only basic fields (last resort)
         if (fetchError && (fetchError.code === '42703' || fetchError.message?.includes('column'))) {
           console.warn('Some branding columns may not exist, trying with basic fields only:', fetchError);
-          const fallbackResult2 = await supabase
+          const fallbackResult3 = await supabase
             .from('Clubs')
             .select('id, name, country, province, is_active, createdAt')
             .eq('id', id)
             .single();
           
-          data = fallbackResult2.data;
-          fetchError = fallbackResult2.error;
+          data = fallbackResult3.data;
+          fetchError = fallbackResult3.error;
         }
       }
 
@@ -273,6 +284,14 @@ export default function EditClubPage({ params }: EditClubProps) {
       setProvince(data.province || '');
       // Set status, fallback to is_active for backwards compatibility
       const clubData = data as any;
+      
+      console.log('Club data loaded, checking module settings:', {
+        hasModuleCourtBooking: 'moduleCourtBooking' in clubData,
+        moduleCourtBooking: clubData.moduleCourtBooking,
+        hasModuleMemberManager: 'moduleMemberManager' in clubData,
+        moduleMemberManager: clubData.moduleMemberManager,
+        allKeys: Object.keys(clubData),
+      });
       if (clubData.status) {
         setStatus(clubData.status);
       } else {
@@ -314,6 +333,46 @@ export default function EditClubPage({ params }: EditClubProps) {
       if (clubData.hoverColor !== undefined && clubData.hoverColor !== null && clubData.hoverColor.trim() !== '') {
         setHoverColor(clubData.hoverColor.trim());
       }
+      
+      // Load module settings from database
+      console.log('Loading module settings from database:', {
+        moduleCourtBooking: clubData.moduleCourtBooking,
+        moduleMemberManager: clubData.moduleMemberManager,
+        moduleWebsite: clubData.moduleWebsite,
+        moduleEmailers: clubData.moduleEmailers,
+        moduleVisitorPayment: clubData.moduleVisitorPayment,
+        moduleFloodlightPayment: clubData.moduleFloodlightPayment,
+        moduleEvents: clubData.moduleEvents,
+        moduleCoaching: clubData.moduleCoaching,
+        moduleLeague: clubData.moduleLeague,
+        moduleAccessControl: clubData.moduleAccessControl,
+        moduleFinanceIntegration: clubData.moduleFinanceIntegration,
+      });
+
+      // Handle null values - if value is null or undefined, use default
+      const getModuleValue = (value: boolean | null | undefined, defaultValue: boolean): boolean => {
+        return value !== null && value !== undefined ? value : defaultValue;
+      };
+
+      const loadedSettings = {
+        moduleCourtBooking: getModuleValue(clubData.moduleCourtBooking, true),
+        moduleMemberManager: getModuleValue(clubData.moduleMemberManager, false),
+        moduleWebsite: getModuleValue(clubData.moduleWebsite, true),
+        moduleEmailers: getModuleValue(clubData.moduleEmailers, true),
+        moduleVisitorPayment: getModuleValue(clubData.moduleVisitorPayment, true),
+        moduleFloodlightPayment: getModuleValue(clubData.moduleFloodlightPayment, true),
+        moduleEvents: getModuleValue(clubData.moduleEvents, true),
+        moduleCoaching: getModuleValue(clubData.moduleCoaching, true),
+        moduleLeague: getModuleValue(clubData.moduleLeague, true),
+        moduleAccessControl: getModuleValue(clubData.moduleAccessControl, true),
+        moduleFinanceIntegration: getModuleValue(clubData.moduleFinanceIntegration, true),
+        // Payments module is derived from Visitor Payment and Floodlight Payment
+        modulePayments: getModuleValue(clubData.moduleVisitorPayment, true) && 
+                        getModuleValue(clubData.moduleFloodlightPayment, true),
+      };
+
+      console.log('Setting module settings state with loaded values:', loadedSettings);
+      setModuleSettings(loadedSettings);
       
       // Load courts for this club (don't await - let it load in background)
       // This prevents courts loading from blocking the page render
@@ -775,11 +834,24 @@ export default function EditClubPage({ params }: EditClubProps) {
       updateData.moduleEvents = moduleSettings.moduleEvents;
       updateData.moduleCoaching = moduleSettings.moduleCoaching;
       updateData.moduleLeague = moduleSettings.moduleLeague;
-      updateData.moduleRankings = moduleSettings.moduleRankings;
-      updateData.moduleMarketing = moduleSettings.moduleMarketing;
       updateData.moduleAccessControl = moduleSettings.moduleAccessControl;
-      updateData.moduleClubWallet = moduleSettings.moduleClubWallet;
       updateData.moduleFinanceIntegration = moduleSettings.moduleFinanceIntegration;
+
+      console.log('Saving module settings:', {
+        moduleCourtBooking: updateData.moduleCourtBooking,
+        moduleMemberManager: updateData.moduleMemberManager,
+        moduleWebsite: updateData.moduleWebsite,
+        moduleEmailers: updateData.moduleEmailers,
+        moduleVisitorPayment: updateData.moduleVisitorPayment,
+        moduleFloodlightPayment: updateData.moduleFloodlightPayment,
+        moduleEvents: updateData.moduleEvents,
+        moduleCoaching: updateData.moduleCoaching,
+        moduleLeague: updateData.moduleLeague,
+        moduleAccessControl: updateData.moduleAccessControl,
+        moduleFinanceIntegration: updateData.moduleFinanceIntegration,
+      });
+
+      console.log('Full updateData being sent:', JSON.stringify(updateData, null, 2));
 
       // Use API route to update (bypasses RLS using service role)
       const response = await fetch(`/api/admin/clubs/${id}/update`, {
@@ -798,15 +870,66 @@ export default function EditClubPage({ params }: EditClubProps) {
 
       // Show success message, and warning if some fields weren't updated
       if (result.warning) {
-        setSuccess(`Club updated successfully! Note: ${result.warning}`);
+        if (result.warning.includes('Module settings were not saved')) {
+          setError(result.warning);
+          setSuccess('Club updated, but module settings were not saved. See error message above.');
+        } else {
+          setSuccess(`Club updated successfully! Note: ${result.warning}`);
+        }
       } else {
         setSuccess('Club updated successfully!');
       }
       
-      // Reload club data from database to get updated values
-      hasLoadedRef.current = false;
-      setClub(null); // Clear club to force reload
-      await loadClubData();
+      // Update state directly from API response if available (faster and more reliable)
+      if (result.data) {
+        console.log('Updating state from API response:', result.data);
+        const updatedClub = result.data as any;
+        
+        // Update club state
+        setClub(updatedClub as Club);
+        
+        // Update module settings from API response
+        if (updatedClub.moduleCourtBooking !== undefined || 
+            updatedClub.moduleMemberManager !== undefined ||
+            updatedClub.moduleWebsite !== undefined) {
+          const getModuleValue = (value: boolean | null | undefined, defaultValue: boolean): boolean => {
+            return value !== null && value !== undefined ? value : defaultValue;
+          };
+          
+          const updatedModuleSettings = {
+            moduleCourtBooking: getModuleValue(updatedClub.moduleCourtBooking, true),
+            moduleMemberManager: getModuleValue(updatedClub.moduleMemberManager, false),
+            moduleWebsite: getModuleValue(updatedClub.moduleWebsite, true),
+            moduleEmailers: getModuleValue(updatedClub.moduleEmailers, true),
+            moduleVisitorPayment: getModuleValue(updatedClub.moduleVisitorPayment, true),
+            moduleFloodlightPayment: getModuleValue(updatedClub.moduleFloodlightPayment, true),
+            moduleEvents: getModuleValue(updatedClub.moduleEvents, true),
+            moduleCoaching: getModuleValue(updatedClub.moduleCoaching, true),
+            moduleLeague: getModuleValue(updatedClub.moduleLeague, true),
+            moduleAccessControl: getModuleValue(updatedClub.moduleAccessControl, true),
+            moduleFinanceIntegration: getModuleValue(updatedClub.moduleFinanceIntegration, true),
+            modulePayments: getModuleValue(updatedClub.moduleVisitorPayment, true) && 
+                            getModuleValue(updatedClub.moduleFloodlightPayment, true),
+          };
+          
+          console.log('Setting module settings from API response:', updatedModuleSettings);
+          setModuleSettings(updatedModuleSettings);
+        }
+      } else {
+        // Fallback: reload from database if API response doesn't have data
+        console.log('API response has no data, reloading from database...');
+        hasLoadedRef.current = false;
+        setClub(null); // Clear club to force reload
+        
+        // Small delay to ensure the database update is committed
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        await loadClubData(true); // Force reload
+        console.log('Club data reloaded after save');
+      }
+      
+      // Force a re-render by updating a dummy state if needed
+      // The loadClubData should already trigger a re-render via setClub and setModuleSettings
       
       // Clear success message after 5 seconds
       setTimeout(() => {
@@ -1829,19 +1952,15 @@ export default function EditClubPage({ params }: EditClubProps) {
                     { key: 'moduleMemberManager', label: 'Member Manager' },
                     { key: 'moduleWebsite', label: 'Website' },
                     { key: 'moduleEmailers', label: 'Emailers' },
-                    { key: 'moduleVisitorPayment', label: 'Visitor Payment' },
-                    { key: 'moduleFloodlightPayment', label: 'Floodlight Payment' },
+                    { key: 'modulePayments', label: 'Payments' },
                     { key: 'moduleEvents', label: 'Events' },
                     { key: 'moduleCoaching', label: 'Coaching' },
                     { key: 'moduleLeague', label: 'League' },
-                    { key: 'moduleRankings', label: 'Rankings' },
-                    { key: 'moduleMarketing', label: 'Marketing' },
                     { key: 'moduleAccessControl', label: 'Access Control' },
-                    { key: 'moduleClubWallet', label: 'Club Wallet' },
                     { key: 'moduleFinanceIntegration', label: 'Finance Integration' },
                   ].map((module) => (
                     <label
-                      key={module.key}
+                      key={`${module.key}-${JSON.stringify(moduleSettings[module.key as keyof typeof moduleSettings])}`}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -1862,12 +1981,24 @@ export default function EditClubPage({ params }: EditClubProps) {
                     >
                       <input
                         type="checkbox"
-                        checked={moduleSettings[module.key as keyof typeof moduleSettings]}
+                        checked={module.key === 'modulePayments' 
+                          ? (moduleSettings.moduleVisitorPayment && moduleSettings.moduleFloodlightPayment)
+                          : moduleSettings[module.key as keyof typeof moduleSettings]}
                         onChange={(e) => {
-                          setModuleSettings({
-                            ...moduleSettings,
-                            [module.key]: e.target.checked
-                          });
+                          if (module.key === 'modulePayments') {
+                            // When Payments is toggled, update both Visitor Payment and Floodlight Payment
+                            setModuleSettings({
+                              ...moduleSettings,
+                              moduleVisitorPayment: e.target.checked,
+                              moduleFloodlightPayment: e.target.checked,
+                              modulePayments: e.target.checked
+                            });
+                          } else {
+                            setModuleSettings({
+                              ...moduleSettings,
+                              [module.key]: e.target.checked
+                            });
+                          }
                         }}
                         disabled={isSubmitting}
                         style={{

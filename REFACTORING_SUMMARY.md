@@ -80,3 +80,4 @@ logWarning('ClubPageClient', 'Invalid interval, using default 60', { interval })
 - The utilities handle Supabase errors, API errors, and generic errors consistently
 - Stack traces are only logged in development mode
 
+

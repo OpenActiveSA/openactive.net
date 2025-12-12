@@ -75,6 +75,64 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
     
     loadCourts();
   }, [club?.id]);
+
+  // Load schedule rules for the club
+  useEffect(() => {
+    const loadScheduleRules = async () => {
+      if (!club?.id) return;
+
+      try {
+        const supabase = getSupabaseClientClient();
+        const { data: rulesData, error: rulesError } = await supabase
+          .from('ScheduleRules')
+          .select('*')
+          .eq('clubId', club.id)
+          .eq('status', 'active')
+          .order('createdAt', { ascending: false });
+
+        if (rulesError) {
+          // If table doesn't exist, that's okay - rules will be empty
+          if (rulesError.code === '42P01' || rulesError.message?.includes('does not exist') || rulesError.message?.includes('relation') || rulesError.message?.includes('table')) {
+            return;
+          }
+          logWarning('ClubPageClient', 'Error loading schedule rules', { error: rulesError });
+          return;
+        }
+
+        if (rulesData) {
+          const mappedRules = rulesData.map((rule: any) => {
+            // Ensure recurringDays are numbers
+            let recurringDays = rule.recurringDays || rule.recurring_days || [];
+            if (Array.isArray(recurringDays) && recurringDays.length > 0) {
+              recurringDays = recurringDays.map((d: any) => typeof d === 'string' ? parseInt(d, 10) : d);
+            }
+            
+            return {
+              id: rule.id,
+              name: rule.name || '',
+              courts: Array.isArray(rule.courts) ? rule.courts.map((c: any) => typeof c === 'string' ? parseInt(c, 10) : c) : [],
+              startDate: rule.startDate || rule.start_date || '',
+              endDate: rule.endDate || rule.end_date || '',
+              startTime: rule.startTime || rule.start_time || '00:00',
+              endTime: rule.endTime || rule.end_time || '23:59',
+              recurring: rule.recurring || 'none',
+              recurringDays: recurringDays,
+              status: rule.status || 'active',
+              setting: rule.setting || 'blocked'
+            };
+          });
+          logDebug('ClubPageClient', 'Loaded schedule rules', { rules: mappedRules });
+          setScheduleRules(mappedRules);
+        }
+      } catch (err) {
+        logError('ClubPageClient', err, { clubId: club.id, action: 'loadScheduleRules' });
+      }
+    };
+
+    if (club?.id) {
+      loadScheduleRules();
+    }
+  }, [club?.id]);
   
   // Fallback to numberOfCourts if no courts found (backwards compatibility)
   const displayCourts = useMemo(() => {
@@ -132,6 +190,19 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [userHasBookingForTimeSlot, setUserHasBookingForTimeSlot] = useState(false);
   const [isLoadingUserRole, setIsLoadingUserRole] = useState(false);
+  const [scheduleRules, setScheduleRules] = useState<Array<{
+    id: string;
+    name: string;
+    courts: number[];
+    startDate: string;
+    endDate: string;
+    startTime: string;
+    endTime: string;
+    recurring: 'none' | 'daily' | 'weekly';
+    recurringDays?: number[];
+    status: 'active' | 'pause';
+    setting: string;
+  }>>([]);
   
   // Update selectedDate and selectedTime when URL params change
   useEffect(() => {
@@ -384,6 +455,148 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
   }, [user?.id, club?.id, selectedDate, selectedTime, authLoading]);
 
   // Helper function to get booking for a specific court and time
+  // Check if a court is blocked by a schedule rule
+  const getScheduleRuleForCourt = useCallback((court: Court, date: string, time: string): typeof scheduleRules[0] | null => {
+    if (!date || !time || scheduleRules.length === 0) {
+      logDebug('ClubPageClient', 'getScheduleRuleForCourt - early return', {
+        hasDate: !!date,
+        hasTime: !!time,
+        rulesCount: scheduleRules.length
+      });
+      return null;
+    }
+
+    // Extract court number from court name (e.g., "Court 1" -> 1)
+    const courtNumberMatch = court.name.match(/\d+/);
+    const courtNumber = courtNumberMatch ? parseInt(courtNumberMatch[0], 10) : 0;
+    if (courtNumber === 0) {
+      logDebug('ClubPageClient', 'getScheduleRuleForCourt - no court number', { courtName: court.name });
+      return null;
+    }
+
+    // Parse the date - use local timezone to avoid UTC issues
+    // Date string is in YYYY-MM-DD format
+    const [year, month, day] = date.split('-').map(Number);
+    const selectedDate = new Date(year, month - 1, day); // month is 0-indexed
+    const selectedDayOfWeek = selectedDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday (Friday = 5)
+    const [timeHours, timeMinutes] = time.split(':').map(Number);
+    const selectedTimeMinutes = timeHours * 60 + timeMinutes;
+
+    logDebug('ClubPageClient', 'getScheduleRuleForCourt - checking', {
+      courtNumber,
+      date,
+      selectedDayOfWeek,
+      dayName: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][selectedDayOfWeek],
+      time,
+      selectedTimeMinutes,
+      rulesCount: scheduleRules.length
+    });
+
+    // Check each active schedule rule
+    for (const rule of scheduleRules) {
+      if (rule.status !== 'active') {
+        logDebug('ClubPageClient', 'Rule not active', { ruleName: rule.name, status: rule.status });
+        continue;
+      }
+      
+      // Check if this rule applies to this court
+      if (!rule.courts.includes(courtNumber)) {
+        logDebug('ClubPageClient', 'Rule does not apply to court', {
+          ruleName: rule.name,
+          ruleCourts: rule.courts,
+          courtNumber
+        });
+        continue;
+      }
+
+      // Parse rule date range - use local timezone
+      const [startYear, startMonth, startDay] = rule.startDate.split('-').map(Number);
+      const [endYear, endMonth, endDay] = rule.endDate.split('-').map(Number);
+      const ruleStartDate = new Date(startYear, startMonth - 1, startDay);
+      const ruleEndDate = new Date(endYear, endMonth - 1, endDay);
+      ruleEndDate.setHours(23, 59, 59, 999); // Include the entire end date
+
+      // Check if selected date is within rule date range
+      if (selectedDate < ruleStartDate || selectedDate > ruleEndDate) {
+        logDebug('ClubPageClient', 'Date not in range', {
+          ruleName: rule.name,
+          selectedDate: selectedDate.toISOString().split('T')[0],
+          ruleStartDate: ruleStartDate.toISOString().split('T')[0],
+          ruleEndDate: ruleEndDate.toISOString().split('T')[0]
+        });
+        continue;
+      }
+
+      // Parse rule time range
+      const [ruleStartHours, ruleStartMinutes] = rule.startTime.split(':').map(Number);
+      const [ruleEndHours, ruleEndMinutes] = rule.endTime.split(':').map(Number);
+      const ruleStartTimeMinutes = ruleStartHours * 60 + ruleStartMinutes;
+      const ruleEndTimeMinutes = ruleEndHours * 60 + ruleEndMinutes;
+
+      logDebug('ClubPageClient', 'Checking rule time and recurring', {
+        ruleName: rule.name,
+        recurring: rule.recurring,
+        recurringDays: rule.recurringDays,
+        ruleStartTime: rule.startTime,
+        ruleEndTime: rule.endTime,
+        selectedTimeMinutes,
+        ruleStartTimeMinutes,
+        ruleEndTimeMinutes
+      });
+
+      // Check recurring pattern
+      if (rule.recurring === 'none') {
+        // One-time rule: check if date and time match
+        if (selectedTimeMinutes >= ruleStartTimeMinutes && selectedTimeMinutes < ruleEndTimeMinutes) {
+          logDebug('ClubPageClient', 'Court blocked by one-time rule', { ruleName: rule.name });
+          return rule;
+        }
+      } else if (rule.recurring === 'daily') {
+        // Daily rule: check if time matches
+        if (selectedTimeMinutes >= ruleStartTimeMinutes && selectedTimeMinutes < ruleEndTimeMinutes) {
+          logDebug('ClubPageClient', 'Court blocked by daily rule', { ruleName: rule.name });
+          return rule;
+        }
+      } else if (rule.recurring === 'weekly') {
+        // Weekly rule: check if day of week matches and time matches
+        const ruleDays = rule.recurringDays || [];
+        logDebug('ClubPageClient', 'Checking weekly rule', {
+          ruleName: rule.name,
+          ruleDays,
+          selectedDayOfWeek,
+          dayMatches: ruleDays.includes(selectedDayOfWeek),
+          timeMatches: selectedTimeMinutes >= ruleStartTimeMinutes && selectedTimeMinutes < ruleEndTimeMinutes
+        });
+        if (ruleDays.includes(selectedDayOfWeek) && 
+            selectedTimeMinutes >= ruleStartTimeMinutes && 
+            selectedTimeMinutes < ruleEndTimeMinutes) {
+          logDebug('ClubPageClient', 'Court blocked by weekly rule', { ruleName: rule.name });
+          return rule;
+        }
+      }
+    }
+
+    logDebug('ClubPageClient', 'Court not blocked', { courtNumber, date, time });
+    return null;
+  }, [scheduleRules]);
+
+  // Helper function to get availability text based on rule setting
+  const getAvailabilityText = (setting: string): string => {
+    const settingMap: Record<string, string> = {
+      'blocked': 'Blocked',
+      'blocked-coaching': 'Blocked for Coaching',
+      'blocked-tournament': 'Blocked for Tournament',
+      'blocked-maintenance': 'Blocked for Maintenance',
+      'blocked-social': 'Blocked for Social',
+      'members-only': 'Members Only',
+      'members-only-bookings': 'Members Only Bookings',
+      'open-doubles-singles': 'Available: Singles & Doubles',
+      'doubles-only': 'Available: Doubles Only',
+      'singles-only': 'Available: Singles Only'
+    };
+    return settingMap[setting] || 'Available: Singles & Doubles';
+  };
+
   const getBookingForCourtAndTime = (courtId: string, time: string) => {
     // Find the court object to get its name
     const court = displayCourts.find(c => c.id === courtId);
@@ -815,20 +1028,23 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                 const booking = selectedTime ? getBookingForCourtAndTime(court.id, selectedTime) : null;
                 const isBooked = !!booking;
                 const bookingNames = booking ? getBookingPlayerNames(booking) : null;
+                const rule = selectedDate && selectedTime ? getScheduleRuleForCourt(court, selectedDate, selectedTime) : null;
+                const hasRule = !!rule;
+                const shouldHighlight = isBooked || hasRule;
                 
                 return (
                 <div 
                   key={court.id} 
                   className={styles.courtCard}
                   style={{
-                    backgroundColor: isBooked ? selectedColor : '#ffffff',
+                    backgroundColor: shouldHighlight ? selectedColor : '#ffffff',
                     border: 'none'
                   }}
                 >
                   <div 
                     className={styles.courtCardName}
                     style={{ 
-                      color: isBooked ? '#ffffff' : '#052333'
+                      color: shouldHighlight ? '#ffffff' : '#052333'
                     }}
                   >
                     {court.name}
@@ -915,7 +1131,7 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                                 <div 
                                   className={styles.courtCardPlayerName}
                                   style={{
-                                    color: isBooked ? '#ffffff' : '#052333'
+                                    color: shouldHighlight ? '#ffffff' : '#052333'
                                   }}
                                 >
                                   {player.name}
@@ -928,64 +1144,79 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                     </div>
                   )}
                   
-                  {/* Duration Selection - Show buttons if logged in and court is not booked, show tennis court icon if not logged in or if visitor/member has booking */}
+                  {/* Duration Selection - Show buttons if logged in and court is not booked, show tennis court icon if not logged in or if visitor/member has booking or if blocked by schedule rule */}
                   {!authLoading && user ? (
-                    !isBooked && validSessionDuration && validSessionDuration.length > 0 && (
-                      // Check if user is visitor/member and has a booking for this time slot
-                      // If so, show court icon instead of duration buttons
-                      (userHasBookingForTimeSlot && (userRole === 'VISITOR' || userRole === 'MEMBER')) ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
-                          <i className="oa-tennis-court" style={{ fontSize: '48px', color: fontColor, opacity: 0.6, display: 'inline-block' }}></i>
-                          <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
-                        </div>
-                      ) : (
-                        <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
-                            {validSessionDuration.map((duration) => (
-                              <button
-                                key={duration}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Always navigate to player selection with booking details
-                                  const params = new URLSearchParams({
-                                    courtId: court.id,
-                                    court: court.name, // Keep for backwards compatibility
-                                    date: selectedDate,
-                                    duration: duration.toString()
-                                  });
-                                  // Add time if selected
-                                  if (selectedTime) {
-                                    params.set('time', selectedTime);
-                                  }
-                                  router.push(`/club/${slug}/players?${params.toString()}`);
-                                }}
-                                className={`${styles.durationButton} ${selectedCourt === court.id && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
-                                style={{
-                                  backgroundColor: actionColor,
-                                  color: '#ffffff',
-                                  border: `2px solid ${actionColor}`,
-                                  borderRadius: '3px',
-                                  padding: '8px 16px',
-                                  fontSize: '14px',
-                                  fontWeight: '500',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1.05)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1)';
-                                }}
-                              >
-                                {duration} min
-                              </button>
-                            ))}
+                    !isBooked && validSessionDuration && validSessionDuration.length > 0 ? (
+                      (() => {
+                        if (rule) {
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                              <i className="oa-tennis-court" style={{ fontSize: '48px', color: '#ffffff', opacity: 0.9, display: 'inline-block' }}></i>
+                              <div style={{ fontSize: '12px', color: '#ffffff', opacity: 0.8 }}>
+                                {rule.name || 'Rule Active'}
+                              </div>
+                            </div>
+                          );
+                        }
+                        // Check if user is visitor/member and has a booking for this time slot
+                        // If so, show court icon instead of duration buttons
+                        if (userHasBookingForTimeSlot && (userRole === 'VISITOR' || userRole === 'MEMBER')) {
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                              <i className="oa-tennis-court" style={{ fontSize: '48px', color: fontColor, opacity: 0.6, display: 'inline-block' }}></i>
+                              <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+                              {validSessionDuration.map((duration) => (
+                                <button
+                                  key={duration}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Always navigate to player selection with booking details
+                                    const params = new URLSearchParams({
+                                      courtId: court.id,
+                                      court: court.name, // Keep for backwards compatibility
+                                      date: selectedDate,
+                                      duration: duration.toString()
+                                    });
+                                    // Add time if selected
+                                    if (selectedTime) {
+                                      params.set('time', selectedTime);
+                                    }
+                                    router.push(`/club/${slug}/players?${params.toString()}`);
+                                  }}
+                                  className={`${styles.durationButton} ${selectedCourt === court.id && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
+                                  style={{
+                                    backgroundColor: actionColor,
+                                    color: '#ffffff',
+                                    border: `2px solid ${actionColor}`,
+                                    borderRadius: '3px',
+                                    padding: '8px 16px',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1.05)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                  }}
+                                >
+                                  {duration} min
+                                </button>
+                              ))}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
                           </div>
-                          <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
-                        </div>
-                      )
-                    )
+                        );
+                      })()
+                    ) : null
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
                       <i className="oa-tennis-court" style={{ fontSize: '48px', color: fontColor, opacity: 0.6, display: 'inline-block' }}></i>
@@ -1027,77 +1258,96 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
               </div>
             ) : (
               <div className={styles.courtButtonsGrid}>
-                {displayCourts.map((court) => (
+                {displayCourts.map((court) => {
+                  const rule = selectedDate && selectedTime ? getScheduleRuleForCourt(court, selectedDate, selectedTime) : null;
+                  const hasRule = !!rule;
+                  
+                  return (
                   <div 
                     key={court.id} 
                     className={styles.courtCard}
                     style={{
-                      backgroundColor: '#ffffff',
+                      backgroundColor: hasRule ? selectedColor : '#ffffff',
                       border: 'none'
                     }}
                   >
                     <div 
                       className={styles.courtCardName}
                       style={{ 
-                        color: '#052333'
+                        color: hasRule ? '#ffffff' : '#052333'
                       }}
                     >
                       {court.name}
                     </div>
                     
-                    {/* Duration Selection - Show buttons if logged in, show tennis court icon if not logged in */}
+                    {/* Duration Selection - Show buttons if logged in, show tennis court icon if not logged in or if blocked by schedule rule */}
                     {!authLoading && user ? (
-                      validSessionDuration && validSessionDuration.length > 0 && (
-                        <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
-                            {validSessionDuration.map((duration) => (
-                              <button
-                                key={duration}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Always navigate to player selection with booking details
-                                  const params = new URLSearchParams({
-                                    courtId: court.id,
-                                    court: court.name, // Keep for backwards compatibility
-                                    date: selectedDate,
-                                    duration: duration.toString()
-                                  });
-                                  // Add time if selected
-                                  if (selectedTime) {
-                                    params.set('time', selectedTime);
-                                  }
-                                  router.push(`/club/${slug}/players?${params.toString()}`);
-                                }}
-                                className={`${styles.durationButton} ${selectedCourt === court.id && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
-                                style={{
-                                  backgroundColor: selectedColor,
-                                  color: '#ffffff',
-                                  border: `2px solid ${selectedColor}`,
-                                  borderRadius: '6px',
-                                  padding: '8px 16px',
-                                  fontSize: '14px',
-                                  fontWeight: '500',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s',
-                                  opacity: selectedCourt === court.id && selectedDuration === duration ? 1 : 0.7
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.opacity = '1';
-                                  e.currentTarget.style.transform = 'scale(1.05)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!(selectedCourt === court.id && selectedDuration === duration)) {
-                                    e.currentTarget.style.opacity = '0.7';
-                                  }
-                                  e.currentTarget.style.transform = 'scale(1)';
-                                }}
-                              >
-                                {duration} min
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )
+                      validSessionDuration && validSessionDuration.length > 0 ? (
+                        (() => {
+                          if (rule) {
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                                <i className="oa-tennis-court" style={{ fontSize: '48px', color: '#ffffff', opacity: 0.9, display: 'inline-block' }}></i>
+                                <div style={{ fontSize: '12px', color: '#ffffff', opacity: 0.8 }}>
+                                  {rule.name || 'Rule Active'}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+                                {validSessionDuration.map((duration) => (
+                                  <button
+                                    key={duration}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // Always navigate to player selection with booking details
+                                      const params = new URLSearchParams({
+                                        courtId: court.id,
+                                        court: court.name, // Keep for backwards compatibility
+                                        date: selectedDate,
+                                        duration: duration.toString()
+                                      });
+                                      // Add time if selected
+                                      if (selectedTime) {
+                                        params.set('time', selectedTime);
+                                      }
+                                      router.push(`/club/${slug}/players?${params.toString()}`);
+                                    }}
+                                    className={`${styles.durationButton} ${selectedCourt === court.id && selectedDuration === duration ? styles.durationButtonSelected : ''}`}
+                                    style={{
+                                      backgroundColor: selectedColor,
+                                      color: '#ffffff',
+                                      border: `2px solid ${selectedColor}`,
+                                      borderRadius: '6px',
+                                      padding: '8px 16px',
+                                      fontSize: '14px',
+                                      fontWeight: '500',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                      opacity: selectedCourt === court.id && selectedDuration === duration ? 1 : 0.7
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.opacity = '1';
+                                      e.currentTarget.style.transform = 'scale(1.05)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (!(selectedCourt === court.id && selectedDuration === duration)) {
+                                        e.currentTarget.style.opacity = '0.7';
+                                      }
+                                      e.currentTarget.style.transform = 'scale(1)';
+                                    }}
+                                  >
+                                    {duration} min
+                                  </button>
+                                ))}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#052333', opacity: 0.8 }}>Available: Singles & Doubles</div>
+                            </div>
+                          );
+                        })()
+                      ) : null
                     ) : (
                       <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
                         <i className="oa-tennis-court" style={{ fontSize: '48px', color: fontColor, opacity: 0.6, display: 'inline-block', marginBottom: '8px' }}></i>
@@ -1105,7 +1355,8 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

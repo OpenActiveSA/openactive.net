@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { useClubAnimation } from './ClubAnimationContext';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 
 type RankingCategory = 'SINGLES_MENS' | 'SINGLES_LADIES' | 'DOUBLES_MENS' | 'DOUBLES_LADIES' | 'MIXED';
 
@@ -39,8 +41,12 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [currentNotificationIndex, setCurrentNotificationIndex] = useState<number>(0);
   const { user } = useAuth();
+  const pathname = usePathname();
   // Always call the hook - it returns safe defaults if context is not available
   const { notificationsVisible, setContentVisible } = useClubAnimation();
+  
+  // Extract slug from pathname (e.g., /club/constantiatennisclub/... -> constantiatennisclub)
+  const slug = pathname?.split('/')[2] || '';
 
   useEffect(() => {
     const loadNotifications = async () => {
@@ -69,17 +75,18 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
           (rankingsData || []).map((r: any) => r.category)
         );
 
+        const missingCategories = allCategories.filter(category => !categoriesWithRankings.has(category));
+
         const newNotifications: Notification[] = [];
-        allCategories.forEach(category => {
-          if (!categoriesWithRankings.has(category)) {
-            newNotifications.push({
-              id: `ranking_${category}`,
-              message: `You haven't set your starting ranking for ${categoryLabels[category]} yet. Set it on the rankings page to appear in the rankings.`,
-              category,
-              type: 'ranking'
-            });
-          }
-        });
+        // Show a single notification if any rankings are missing
+        if (missingCategories.length > 0) {
+          newNotifications.push({
+            id: 'ranking_missing',
+            message: `You haven't set your starting rank yet.`,
+            category: missingCategories[0], // Use first missing category for the link
+            type: 'ranking'
+          });
+        }
 
         setNotifications(newNotifications);
         setCurrentNotificationIndex(0);
@@ -117,8 +124,8 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
   return (
     <div style={{
       width: '100%',
-      backgroundColor: '#fbbf24',
-      color: '#052333',
+      backgroundColor: 'var(--openactive-gold, #cda746)',
+      color: '#ffffff',
       padding: '12px 20px',
       fontSize: '14px',
       fontWeight: '500',
@@ -169,10 +176,39 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
         alignItems: 'center',
         justifyContent: 'center',
         gap: '8px',
-        textAlign: 'center'
+        textAlign: 'center',
+        flexWrap: 'wrap'
       }}>
-        <span>⚠️</span>
         <span>{notifications[currentNotificationIndex]?.message}</span>
+        {notifications[currentNotificationIndex]?.type === 'ranking' && slug && (
+          <Link
+            href={`/club/${slug}/rankings${notifications[currentNotificationIndex]?.category ? `?category=${notifications[currentNotificationIndex].category}` : ''}`}
+            style={{
+              display: 'inline-block',
+              backgroundColor: '#ffffff',
+              color: 'var(--openactive-gold, #cda746)',
+              padding: '4px 12px',
+              borderRadius: '4px',
+              fontWeight: '600',
+              marginLeft: '8px',
+              cursor: 'pointer',
+              textDecoration: 'none',
+              fontSize: '13px',
+              transition: 'background-color 0.2s, opacity 0.2s',
+              border: '1px solid #ffffff'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f0f0f0';
+              e.currentTarget.style.opacity = '0.9';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#ffffff';
+              e.currentTarget.style.opacity = '1';
+            }}
+          >
+            Set now
+          </Link>
+        )}
       </div>
 
       {/* Right arrow and counter */}
@@ -184,7 +220,7 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
       }}>
         {notifications.length > 1 && (
           <>
-            <span style={{ fontSize: '12px', opacity: 0.7 }}>
+            <span style={{ fontSize: '12px', opacity: 0.9, color: '#ffffff' }}>
               {currentNotificationIndex + 1} of {notifications.length}
             </span>
             <button
@@ -196,7 +232,7 @@ export default function ClubNotifications({ clubId, fontColor }: ClubNotificatio
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#052333',
+                color: '#ffffff',
                 cursor: 'pointer',
                 padding: '4px 8px',
                 fontSize: '18px',

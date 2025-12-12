@@ -46,12 +46,22 @@ interface Club {
   moduleEvents?: boolean;
   moduleCoaching?: boolean;
   moduleLeague?: boolean;
-  moduleRankings?: boolean;
-  moduleMarketing?: boolean;
   moduleAccessControl?: boolean;
-  moduleClubWallet?: boolean;
   moduleFinanceIntegration?: boolean;
 }
+
+// Helper function to check if a module is enabled
+// Handles various truthy values that might come from the database
+const isModuleEnabled = (value: boolean | null | undefined | string | number): boolean => {
+  // Handle explicit boolean true
+  if (value === true) return true;
+  // Handle string "true"
+  if (value === 'true') return true;
+  // Handle number 1
+  if (value === 1) return true;
+  // Everything else (false, null, undefined, "false", 0, etc.) is disabled
+  return false;
+};
 
 export function AdminDashboard() {
   const router = useRouter();
@@ -153,33 +163,46 @@ export function AdminDashboard() {
       // First attempt: with all columns
       const resultWithAll = await supabase
         .from('Clubs')
-        .select('id, name, country, province, is_active, status, logo, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleRankings, moduleMarketing, moduleAccessControl, moduleClubWallet, moduleFinanceIntegration, createdAt')
+        .select('id, name, country, province, is_active, status, logo, backgroundColor, selectedColor, actionColor, fontColor, hoverColor, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleAccessControl, moduleFinanceIntegration, createdAt')
         .order('createdAt', { ascending: false });
       
       clubsData = resultWithAll.data;
       clubsError = resultWithAll.error;
 
-      // If error is about missing columns, try without branding fields
+      // If error is about missing columns, try without branding fields but keep module columns
       if (clubsError && (clubsError.code === '42703' || clubsError.message?.includes('column'))) {
-        console.warn('Some columns not found, loading clubs without branding fields');
-        const resultWithoutBranding = await supabase
+        console.warn('Some columns not found, trying to load clubs with module columns');
+        // Try with module columns but without branding
+        const resultWithModules = await supabase
           .from('Clubs')
-          .select('id, name, country, province, is_active, status, createdAt')
+          .select('id, name, country, province, is_active, status, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleAccessControl, moduleFinanceIntegration, createdAt')
           .order('createdAt', { ascending: false });
         
-        clubsData = resultWithoutBranding.data;
-        clubsError = resultWithoutBranding.error;
-        
-        // If still error about status, try without status too
-        if (clubsError && (clubsError.code === '42703' || clubsError.message?.includes('status'))) {
-          console.warn('Status column not found, loading clubs without status field');
-          const resultWithoutStatus = await supabase
-            .from('Clubs')
-            .select('id, name, country, province, is_active, createdAt')
-            .order('createdAt', { ascending: false });
-          
-          clubsData = resultWithoutStatus.data;
-          clubsError = resultWithoutStatus.error;
+        if (!resultWithModules.error) {
+          clubsData = resultWithModules.data;
+          clubsError = resultWithModules.error;
+        } else {
+          // If that fails, try without status but keep modules
+          if (resultWithModules.error.message?.includes('status')) {
+            console.warn('Status column not found, loading clubs without status but with modules');
+            const resultWithoutStatus = await supabase
+              .from('Clubs')
+              .select('id, name, country, province, is_active, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleAccessControl, moduleFinanceIntegration, createdAt')
+              .order('createdAt', { ascending: false });
+            
+            clubsData = resultWithoutStatus.data;
+            clubsError = resultWithoutStatus.error;
+          } else {
+            // Last resort: without branding and status
+            console.warn('Loading clubs without branding fields');
+            const resultWithoutBranding = await supabase
+              .from('Clubs')
+              .select('id, name, country, province, is_active, status, createdAt')
+              .order('createdAt', { ascending: false });
+            
+            clubsData = resultWithoutBranding.data;
+            clubsError = resultWithoutBranding.error;
+          }
         }
       }
 
@@ -197,6 +220,22 @@ export function AdminDashboard() {
         }
         setClubs([]);
       } else {
+        // Debug: Log module values from first club to see what we're getting
+        if (clubsData && clubsData.length > 0) {
+          const firstClub = clubsData[0];
+          console.log('First club module values:', {
+            name: firstClub.name,
+            moduleCourtBooking: firstClub.moduleCourtBooking,
+            moduleCourtBookingType: typeof firstClub.moduleCourtBooking,
+            moduleMemberManager: firstClub.moduleMemberManager,
+            moduleMemberManagerType: typeof firstClub.moduleMemberManager,
+            moduleCoaching: firstClub.moduleCoaching,
+            moduleCoachingType: typeof firstClub.moduleCoaching,
+            moduleLeague: firstClub.moduleLeague,
+            moduleLeagueType: typeof firstClub.moduleLeague,
+            allModuleKeys: Object.keys(firstClub).filter(k => k.startsWith('module')),
+          });
+        }
         setClubs((clubsData || []) as Club[]);
       }
     } catch (err: any) {
@@ -605,18 +644,29 @@ function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxWidth: '300px' }}>
-                        {[
-                          { key: 'moduleCourtBooking', label: 'Booking', enabled: club.moduleCourtBooking ?? true },
-                          { key: 'moduleMemberManager', label: 'Members', enabled: club.moduleMemberManager ?? false },
-                          { key: 'moduleWebsite', label: 'Website', enabled: club.moduleWebsite ?? true },
-                          { key: 'moduleEmailers', label: 'Email', enabled: club.moduleEmailers ?? true },
-                          { key: 'modulePayments', label: 'Payments', enabled: (club.moduleVisitorPayment ?? true) || (club.moduleFloodlightPayment ?? true) },
-                          { key: 'moduleEvents', label: 'Events', enabled: club.moduleEvents ?? true },
-                          { key: 'moduleCoaching', label: 'Coaching', enabled: club.moduleCoaching ?? true },
-                          { key: 'moduleLeague', label: 'League', enabled: club.moduleLeague ?? true },
-                          { key: 'moduleAccessControl', label: 'Access Control', enabled: club.moduleAccessControl ?? true },
-                          { key: 'moduleFinanceIntegration', label: 'Finance', enabled: club.moduleFinanceIntegration ?? true },
-                        ].map((module) => (
+                        {(() => {
+                          // Debug: Log values for first club
+                          if (club.id === clubsWithCourtCounts[0]?.id) {
+                            console.log('Rendering modules for club:', club.name, {
+                              moduleCourtBooking: club.moduleCourtBooking,
+                              isEnabled: isModuleEnabled(club.moduleCourtBooking),
+                              moduleCoaching: club.moduleCoaching,
+                              isEnabledCoaching: isModuleEnabled(club.moduleCoaching),
+                            });
+                          }
+                          return [
+                            { key: 'moduleCourtBooking', label: 'Booking', enabled: isModuleEnabled(club.moduleCourtBooking) },
+                            { key: 'moduleMemberManager', label: 'Members', enabled: isModuleEnabled(club.moduleMemberManager) },
+                            { key: 'moduleWebsite', label: 'Website', enabled: isModuleEnabled(club.moduleWebsite) },
+                            { key: 'moduleEmailers', label: 'Email', enabled: isModuleEnabled(club.moduleEmailers) },
+                            { key: 'modulePayments', label: 'Payments', enabled: isModuleEnabled(club.moduleVisitorPayment) || isModuleEnabled(club.moduleFloodlightPayment) },
+                            { key: 'moduleEvents', label: 'Events', enabled: isModuleEnabled(club.moduleEvents) },
+                            { key: 'moduleCoaching', label: 'Coaching', enabled: isModuleEnabled(club.moduleCoaching) },
+                            { key: 'moduleLeague', label: 'League', enabled: isModuleEnabled(club.moduleLeague) },
+                            { key: 'moduleAccessControl', label: 'Access Control', enabled: isModuleEnabled(club.moduleAccessControl) },
+                            { key: 'moduleFinanceIntegration', label: 'Finance', enabled: isModuleEnabled(club.moduleFinanceIntegration) },
+                          ];
+                        })().map((module) => (
                           <span
                             key={module.key}
                             style={{
@@ -659,8 +709,10 @@ function OverviewTab({ users, clubs }: { users: User[]; clubs: Club[] }) {
                           View
                         </Link>
                         <Link 
-                          href={`/admin/clubs/${club.id}/edit`}
-                          className={styles.btnEdit}
+                          href={`/club/${generateSlug(club.name)}/admin`}
+                          className={styles.btnManage}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           style={{ 
                             padding: '6px 12px', 
                             fontSize: '13px',
@@ -953,7 +1005,45 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
   const [province, setProvince] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [deletingClubId, setDeletingClubId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [clubsWithCourtCounts, setClubsWithCourtCounts] = useState<Array<Club & { courtCount?: number }>>(clubs);
+  const [isLoadingCourtCounts, setIsLoadingCourtCounts] = useState(false);
   const supabase = getSupabaseClientClient();
+
+  // Load court counts for all clubs
+  useEffect(() => {
+    const loadCourtCounts = async () => {
+      if (clubs.length === 0) return;
+      
+      setIsLoadingCourtCounts(true);
+      try {
+        const { data: courtsData } = await supabase
+          .from('Courts')
+          .select('clubId')
+          .eq('isActive', true);
+        
+        if (courtsData) {
+          const courtCounts = courtsData.reduce((acc, court) => {
+            acc[court.clubId] = (acc[court.clubId] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          
+          setClubsWithCourtCounts(clubs.map(club => ({
+            ...club,
+            courtCount: courtCounts[club.id] || 0
+          })));
+        }
+      } catch (err) {
+        console.error('Error loading court counts:', err);
+        setClubsWithCourtCounts(clubs);
+      } finally {
+        setIsLoadingCourtCounts(false);
+      }
+    };
+    
+    loadCourtCounts();
+  }, [clubs, supabase]);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '—';
@@ -1002,7 +1092,7 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
     }
   };
 
-  const filteredClubs = clubs.filter((club) =>
+  const filteredClubs = clubsWithCourtCounts.filter((club) =>
     club.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -1095,6 +1185,36 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
     }
   };
 
+  const handleDeleteClub = async (clubId: string, clubName: string) => {
+    if (!confirm(`Are you sure you want to delete "${clubName}"? This will permanently delete the club and all associated data (courts, bookings, memberships). This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingClubId(clubId);
+    setError('');
+
+    try {
+      const response = await fetch(`/api/admin/clubs/${clubId}/delete`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to delete club');
+      }
+
+      // Refresh the clubs list
+      onRefresh();
+      setShowDeleteConfirm(null);
+    } catch (err: any) {
+      console.error('Error deleting club:', err);
+      setError(err.message || 'Failed to delete club');
+    } finally {
+      setDeletingClubId(null);
+    }
+  };
+
   return (
     <div className={styles.contentSection}>
       <div className={styles.sectionHeader}>
@@ -1151,7 +1271,13 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
                 </span>
               </div>
               <p className={styles.clubDescription}>
-                {club.numberOfCourts || 0} {club.numberOfCourts === 1 ? 'court' : 'courts'}
+                {isLoadingCourtCounts ? (
+                  <span style={{ opacity: 0.6 }}>Loading...</span>
+                ) : (
+                  <>
+                    {club.courtCount || 0} {(club.courtCount || 0) === 1 ? 'court' : 'courts'}
+                  </>
+                )}
               </p>
               {club.province && (
                 <p className={styles.clubLocation} style={{ marginTop: '8px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.6)' }}>
@@ -1161,20 +1287,16 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
               <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                   {[
-                    { key: 'moduleCourtBooking', label: 'Booking', enabled: club.moduleCourtBooking ?? true },
-                    { key: 'moduleMemberManager', label: 'Members', enabled: club.moduleMemberManager ?? false },
-                    { key: 'moduleWebsite', label: 'Website', enabled: club.moduleWebsite ?? true },
-                    { key: 'moduleEmailers', label: 'Email', enabled: club.moduleEmailers ?? true },
-                    { key: 'moduleVisitorPayment', label: 'Visitor Payment', enabled: club.moduleVisitorPayment ?? true },
-                    { key: 'moduleFloodlightPayment', label: 'Floodlight Payment', enabled: club.moduleFloodlightPayment ?? true },
-                    { key: 'moduleEvents', label: 'Events', enabled: club.moduleEvents ?? true },
-                    { key: 'moduleCoaching', label: 'Coaching', enabled: club.moduleCoaching ?? true },
-                    { key: 'moduleLeague', label: 'League', enabled: club.moduleLeague ?? true },
-                    { key: 'moduleRankings', label: 'Rankings', enabled: club.moduleRankings ?? true },
-                    { key: 'moduleMarketing', label: 'Marketing', enabled: club.moduleMarketing ?? true },
-                    { key: 'moduleAccessControl', label: 'Access Control', enabled: club.moduleAccessControl ?? true },
-                    { key: 'moduleClubWallet', label: 'Club Wallet', enabled: club.moduleClubWallet ?? true },
-                    { key: 'moduleFinanceIntegration', label: 'Finance', enabled: club.moduleFinanceIntegration ?? true },
+                    { key: 'moduleCourtBooking', label: 'Booking', enabled: isModuleEnabled(club.moduleCourtBooking) },
+                    { key: 'moduleMemberManager', label: 'Members', enabled: isModuleEnabled(club.moduleMemberManager) },
+                    { key: 'moduleWebsite', label: 'Website', enabled: isModuleEnabled(club.moduleWebsite) },
+                    { key: 'moduleEmailers', label: 'Email', enabled: isModuleEnabled(club.moduleEmailers) },
+                    { key: 'modulePayments', label: 'Payments', enabled: isModuleEnabled(club.moduleVisitorPayment) || isModuleEnabled(club.moduleFloodlightPayment) },
+                    { key: 'moduleEvents', label: 'Events', enabled: isModuleEnabled(club.moduleEvents) },
+                    { key: 'moduleCoaching', label: 'Coaching', enabled: isModuleEnabled(club.moduleCoaching) },
+                    { key: 'moduleLeague', label: 'League', enabled: isModuleEnabled(club.moduleLeague) },
+                    { key: 'moduleAccessControl', label: 'Access Control', enabled: isModuleEnabled(club.moduleAccessControl) },
+                    { key: 'moduleFinanceIntegration', label: 'Finance', enabled: isModuleEnabled(club.moduleFinanceIntegration) },
                   ].map((module) => (
                     <span
                       key={module.key}
@@ -1218,10 +1340,63 @@ function AllClubsTab({ clubs, onRefresh }: { clubs: Club[]; onRefresh: () => voi
                   >
                     Manage
                   </Link>
+                  <button
+                    onClick={() => handleDeleteClub(club.id, club.name)}
+                    disabled={deletingClubId === club.id}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: deletingClubId === club.id ? 'rgba(239, 68, 68, 0.5)' : 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: deletingClubId === club.id ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (deletingClubId !== club.id) {
+                        e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+                        e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (deletingClubId !== club.id) {
+                        e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                        e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                      }
+                    }}
+                  >
+                    {deletingClubId === club.id ? (
+                      <>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}>
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                        </svg>
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"></polyline>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Delete
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {error && (
+        <div className={styles.errorMessage} style={{ marginTop: '16px' }}>
+          {error}
         </div>
       )}
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
 import { getSupabaseClientClient } from '@/lib/supabase';
 import { type ClubRole } from '@/lib/club-roles';
@@ -42,6 +42,7 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
   const router = useRouter();
   const { user } = useAuth();
   const { contentVisible } = useClubAnimation();
+  const searchParams = useSearchParams();
   
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [members, setMembers] = useState<ClubMember[]>([]);
@@ -50,7 +51,14 @@ function ClubRankingsContent({ slug, clubSettings }: ClubRankingsClientProps) {
   const [hasSetRanking, setHasSetRanking] = useState<boolean>(false);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<RankingCategory>('SINGLES_MENS');
+  const [selectedCategory, setSelectedCategory] = useState<RankingCategory>(() => {
+    // Initialize from URL query parameter if present
+    const categoryParam = searchParams?.get('category');
+    if (categoryParam && ['SINGLES_MENS', 'SINGLES_LADIES', 'DOUBLES_MENS', 'DOUBLES_LADIES', 'MIXED'].includes(categoryParam)) {
+      return categoryParam as RankingCategory;
+    }
+    return 'SINGLES_MENS';
+  });
   const [rankings, setRankings] = useState<Map<string, UserRanking>>(new Map());
   const [isSavingRanking, setIsSavingRanking] = useState<boolean>(false);
   

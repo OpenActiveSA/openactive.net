@@ -132,18 +132,34 @@ export async function PUT(
       'moduleEvents',
       'moduleCoaching',
       'moduleLeague',
-      'moduleRankings',
-      'moduleMarketing',
       'moduleAccessControl',
-      'moduleClubWallet',
       'moduleFinanceIntegration',
     ];
+
+    console.log('API Route - Received module settings from body:', {
+      moduleCourtBooking: body.moduleCourtBooking,
+      moduleMemberManager: body.moduleMemberManager,
+      moduleWebsite: body.moduleWebsite,
+      moduleEmailers: body.moduleEmailers,
+      moduleVisitorPayment: body.moduleVisitorPayment,
+      moduleFloodlightPayment: body.moduleFloodlightPayment,
+      moduleEvents: body.moduleEvents,
+      moduleCoaching: body.moduleCoaching,
+      moduleLeague: body.moduleLeague,
+      moduleAccessControl: body.moduleAccessControl,
+      moduleFinanceIntegration: body.moduleFinanceIntegration,
+    });
 
     moduleFields.forEach((field) => {
       if (body[field] !== undefined) {
         updateData[field] = Boolean(body[field]);
+        console.log(`API Route - Added ${field} to updateData:`, updateData[field]);
+      } else {
+        console.log(`API Route - ${field} is undefined in body, skipping`);
       }
     });
+
+    console.log('API Route - Final updateData with modules:', JSON.stringify(updateData, null, 2));
 
     // Perform the update - try with all fields first
     console.log('Updating club with data:', JSON.stringify(updateData, null, 2));
@@ -152,16 +168,40 @@ export async function PUT(
       .from('Clubs')
       .update(updateData)
       .eq('id', id)
-      .select()
+      .select('id, name, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleAccessControl, moduleFinanceIntegration')
       .single();
     
     data = result.data;
     error = result.error;
-    console.log('Update result:', { data: data ? { ...data, logo: data.logo } : null, error });
+    console.log('Update result:', { 
+      success: !error, 
+      data: data ? { 
+        id: data.id, 
+        name: data.name,
+        moduleCourtBooking: data.moduleCourtBooking,
+        moduleMemberManager: data.moduleMemberManager,
+        moduleWebsite: data.moduleWebsite,
+        moduleEmailers: data.moduleEmailers,
+        moduleVisitorPayment: data.moduleVisitorPayment,
+        moduleFloodlightPayment: data.moduleFloodlightPayment,
+        moduleEvents: data.moduleEvents,
+        moduleCoaching: data.moduleCoaching,
+        moduleLeague: data.moduleLeague,
+        moduleAccessControl: data.moduleAccessControl,
+        moduleFinanceIntegration: data.moduleFinanceIntegration,
+      } : null, 
+      error: error ? {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      } : null 
+    });
 
     // If error is about missing columns, try without optional fields
     if (error && (error.code === '42703' || error.message?.includes('column') || error.message?.includes('schema cache') || error.message?.includes('Could not find'))) {
       console.warn('Missing column detected, trying update without optional fields');
+      console.log('Error details:', error.message);
       console.log('Update data before fallback:', updateData);
       // Remove fields that might not exist, but keep logo and basic fields
       const { 
@@ -176,6 +216,20 @@ export async function PUT(
         visitorBookingDays: __________,
         coachBookingDays: ___________,
         clubManagerBookingDays: ____________,
+        moduleCourtBooking: _____________,
+        moduleMemberManager: ______________,
+        moduleWebsite: _______________,
+        moduleEmailers: ________________,
+        moduleVisitorPayment: _________________,
+        moduleFloodlightPayment: __________________,
+        moduleEvents: ___________________,
+        moduleCoaching: ____________________,
+        moduleLeague: _____________________,
+        moduleRankings: ______________________,
+        moduleMarketing: _______________________,
+        moduleAccessControl: ________________________,
+        moduleClubWallet: _________________________,
+        moduleFinanceIntegration: __________________________,
         ...basicUpdateData 
       } = updateData;
       // Keep logo in basicUpdateData if it was provided
@@ -183,22 +237,51 @@ export async function PUT(
         basicUpdateData.logo = updateData.logo;
       }
       
-      const basicResult = await supabase
-        .from('Clubs')
-        .update(basicUpdateData)
-        .eq('id', id)
-        .select()
-        .single();
+      // Try to select module columns if they exist, otherwise select all
+      let basicResult;
+      try {
+        basicResult = await supabase
+          .from('Clubs')
+          .update(basicUpdateData)
+          .eq('id', id)
+          .select('id, name, moduleCourtBooking, moduleMemberManager, moduleWebsite, moduleEmailers, moduleVisitorPayment, moduleFloodlightPayment, moduleEvents, moduleCoaching, moduleLeague, moduleAccessControl, moduleFinanceIntegration')
+          .single();
+      } catch (selectError) {
+        // If selecting specific columns fails (e.g., module columns don't exist), select all
+        basicResult = await supabase
+          .from('Clubs')
+          .update(basicUpdateData)
+          .eq('id', id)
+          .select()
+          .single();
+      }
       
       data = basicResult.data;
       error = basicResult.error;
       
       if (!error && data) {
+        // Check if module fields were in the update but were removed
+        const hadModuleFields = updateData.moduleCourtBooking !== undefined || 
+                                updateData.moduleMemberManager !== undefined ||
+                                updateData.moduleWebsite !== undefined ||
+                                updateData.moduleEmailers !== undefined ||
+                                updateData.moduleVisitorPayment !== undefined ||
+                                updateData.moduleFloodlightPayment !== undefined ||
+                                updateData.moduleEvents !== undefined ||
+                                updateData.moduleCoaching !== undefined ||
+                                updateData.moduleLeague !== undefined ||
+                                updateData.moduleAccessControl !== undefined ||
+                                updateData.moduleFinanceIntegration !== undefined;
+        
         // Update succeeded without optional fields
+        const warningMessage = hadModuleFields 
+          ? 'Module settings were not saved because the module columns do not exist in the database. Please run the migration script: ADD_CLUB_MODULE_COLUMNS.sql. Other fields were updated successfully.'
+          : 'Some fields were not updated because the columns do not exist in the database. Please run the migration scripts: ADD_ALL_CLUB_BRANDING_COLUMNS.sql, ADD_ALL_BOOKING_DAYS_COLUMNS.sql, and ADD_CLUB_MODULE_COLUMNS.sql';
+        
         return NextResponse.json({ 
           success: true, 
           data,
-          warning: 'Some fields were not updated because the columns do not exist in the database. Please run the migration scripts: ADD_ALL_CLUB_BRANDING_COLUMNS.sql and ADD_CLUB_BOOKING_DAYS_COLUMNS.sql'
+          warning: warningMessage
         });
       }
     }

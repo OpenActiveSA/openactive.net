@@ -89,3 +89,4 @@ export default function ClubFooter({ fontColor }: ClubFooterProps) {
 }
 
 
+
