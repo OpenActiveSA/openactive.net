@@ -47,7 +47,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     // Get all active clubs and find by slug
     const result = await supabase
       .from('Clubs')
-      .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays')
+      .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays, country, timezone')
       .eq('is_active', true);
     
     clubData = result.data;
@@ -57,11 +57,22 @@ export default async function ClubPage({ params }: ClubPageProps) {
     if (error && (error.code === '42703' || error.message?.includes('column'))) {
       const fallbackResult = await supabase
         .from('Clubs')
-        .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
+        .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, country, timezone')
         .eq('is_active', true);
       
       clubData = fallbackResult.data;
       error = fallbackResult.error;
+      
+      // If still error, try without country and timezone (they might not exist yet)
+      if (error && (error.code === '42703' || error.message?.includes('column'))) {
+        const fallbackResult2 = await supabase
+          .from('Clubs')
+          .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
+          .eq('is_active', true);
+        
+        clubData = fallbackResult2.data;
+        error = fallbackResult2.error;
+      }
     }
 
     if (!error && clubData) {
@@ -105,6 +116,10 @@ export default async function ClubPage({ params }: ClubPageProps) {
   const logo = club?.logo || undefined;
   const openingTime = (club as any)?.openingTime || '06:00';
   const closingTime = (club as any)?.closingTime || '22:00';
+  
+  // Get timezone from club settings
+  const { getClubTimezone } = await import('@/lib/timezone-utils');
+  const timezone = getClubTimezone((club as any)?.country, (club as any)?.timezone);
   
   // Ensure bookingSlotInterval is properly converted to a number
   let bookingSlotInterval = 60; // default
@@ -179,6 +194,7 @@ export default async function ClubPage({ params }: ClubPageProps) {
     visitorBookingDays={visitorBookingDays}
     coachBookingDays={coachBookingDays}
     clubManagerBookingDays={clubManagerBookingDays}
+    timezone={timezone}
   />;
 }
 

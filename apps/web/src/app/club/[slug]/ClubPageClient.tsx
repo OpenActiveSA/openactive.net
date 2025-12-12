@@ -8,6 +8,7 @@ import { getClubCourts, SPORT_TYPE_LABELS, type Court } from '@/lib/courts';
 import { ClubAnimationProvider, useClubAnimation } from '@/components/club/ClubAnimationContext';
 import { getUserClubRole, type ClubRole } from '@/lib/club-roles';
 import { logError, logWarning, logDebug } from '@/lib/error-utils';
+import { getCurrentTimeInTimezone, isTimeInPast, convertToClubTimezone } from '@/lib/timezone-utils';
 import ClubHeader from '@/components/club/ClubHeader';
 import ClubFooter from '@/components/club/ClubFooter';
 import ClubNotifications from '@/components/club/ClubNotifications';
@@ -38,9 +39,10 @@ interface ClubPageClientProps {
   visitorBookingDays: number;
   coachBookingDays: number;
   clubManagerBookingDays: number;
+  timezone: string;
 }
 
-function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays }: ClubPageClientProps) {
+function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays, timezone }: ClubPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
@@ -850,36 +852,67 @@ function ClubPageContent({ club, slug, logo, backgroundColor, fontColor, selecte
   }, [generateDateButtons, maxBookingDays, userRole, isSuperAdmin]);
 
 
-  // Find the closest time to current time
+  // Find the closest time to current time (using club's timezone)
   const findClosestTime = useCallback((slots: string[], dateString: string): string | null => {
     if (!slots || slots.length === 0) return null;
     
-    const today = new Date();
+    // Get current date in club's timezone
+    const nowInClubTimezone = convertToClubTimezone(new Date(), timezone);
+    const todayInClubTimezone = nowInClubTimezone.toDateString();
+    
     const selectedDate = new Date(dateString);
-    const isToday = selectedDate.toDateString() === today.toDateString();
+    const selectedDateInClubTimezone = convertToClubTimezone(selectedDate, timezone);
+    const isToday = selectedDateInClubTimezone.toDateString() === todayInClubTimezone;
     
     if (!isToday) {
       // For future dates, select the first time slot
       return slots[0];
     }
     
-    // For today, find the closest time that hasn't passed
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // For today, find the time slot that contains the current time (in club's timezone)
+    const currentTimeInTimezone = getCurrentTimeInTimezone(timezone);
+    const [currentHours, currentMinutes] = currentTimeInTimezone.split(':').map(Number);
+    const currentTotalMinutes = currentHours * 60 + currentMinutes;
     
-    // Find the first time slot that is >= current time
+    // Calculate interval for slot duration
+    let interval: number;
+    if (typeof bookingSlotInterval === 'number') {
+      interval = bookingSlotInterval;
+    } else if (typeof bookingSlotInterval === 'string') {
+      interval = parseInt(String(bookingSlotInterval), 10);
+    } else {
+      interval = 60; // default
+    }
+    if (isNaN(interval) || interval <= 0) {
+      interval = 60;
+    }
+    
+    // Find the time slot that the current time falls within
+    // A slot contains the current time if: slotStart <= currentTime < slotStart + interval
+    for (let i = 0; i < slots.length; i++) {
+      const [hours, minutes] = slots[i].split(':').map(Number);
+      const slotStartMinutes = hours * 60 + minutes;
+      const slotEndMinutes = slotStartMinutes + interval;
+      
+      // Check if current time falls within this slot
+      if (currentTotalMinutes >= slotStartMinutes && currentTotalMinutes < slotEndMinutes) {
+        return slots[i];
+      }
+    }
+    
+    // If no slot contains the current time, find the next available slot
     for (const time of slots) {
       const [hours, minutes] = time.split(':').map(Number);
       const timeMinutes = hours * 60 + minutes;
       
-      if (timeMinutes >= currentMinutes) {
+      if (timeMinutes > currentTotalMinutes) {
         return time;
       }
     }
     
     // If all times have passed, return the last time slot
     return slots[slots.length - 1];
-  }, []);
+  }, [timezone]);
 
   const handleDateChange = (dateString: string) => {
     setSelectedDate(dateString);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase';
+import { getClubTimezone } from '@/lib/timezone-utils';
 
 export async function PUT(
   request: NextRequest,
@@ -22,12 +23,36 @@ export async function PUT(
 
     // Build update object
     // Note: numberOfCourts is no longer used - courts are managed via the Courts table
+    const countryValue = body.country && body.country.trim() ? body.country.trim() : null;
     const updateData: any = {
       name: body.name.trim(),
-      country: body.country && body.country.trim() ? body.country.trim() : null,
+      country: countryValue,
       province: body.province && body.province.trim() ? body.province.trim() : null,
       updatedAt: new Date().toISOString(),
     };
+    
+    // Auto-populate timezone from country if country is set and timezone is not explicitly provided
+    // Only update timezone if it's not already set (to allow manual override)
+    if (countryValue && body.timezone === undefined) {
+      // Get current timezone from database to check if it's already set
+      const { data: currentClub } = await supabase
+        .from('Clubs')
+        .select('timezone')
+        .eq('id', id)
+        .maybeSingle();
+      
+      // Only auto-populate if timezone is not already set
+      if (!currentClub?.timezone || currentClub.timezone.trim() === '') {
+        const autoTimezone = getClubTimezone(countryValue, null);
+        if (autoTimezone && autoTimezone !== 'UTC') {
+          updateData.timezone = autoTimezone;
+          console.log(`Auto-populating timezone for club ${id}: ${autoTimezone} (from country: ${countryValue})`);
+        }
+      }
+    } else if (body.timezone !== undefined) {
+      // If timezone is explicitly provided, use it
+      updateData.timezone = body.timezone && body.timezone.trim() ? body.timezone.trim() : null;
+    }
 
     // Add is_active if provided
     if (body.is_active !== undefined) {
