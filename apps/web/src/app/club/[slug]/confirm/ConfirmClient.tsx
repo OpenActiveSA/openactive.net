@@ -33,6 +33,8 @@ function ConfirmBookingContent({ slug, clubSettings }: ConfirmClientProps) {
   const [club, setClub] = useState<{ id: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [showPaymentFrame, setShowPaymentFrame] = useState(false);
+  const [paymentFormUrl, setPaymentFormUrl] = useState<string | null>(null);
   
   // Get booking details from URL params
   const courtId = searchParams.get('courtId');
@@ -273,11 +275,88 @@ function ConfirmBookingContent({ slug, clubSettings }: ConfirmClientProps) {
         throw new Error('Booking was not created. Please try again.');
       }
       
-      // Redirect to booking page with date and time selected to show the new booking
-      const params = new URLSearchParams();
-      if (date) params.set('date', date);
-      if (time) params.set('time', time);
-      router.push(`/club/${slug}?${params.toString()}`);
+      // Check if payment is required
+      // Payment is required if there are visitors (non-members) or if total > 0
+      const requiresPayment = pricing.total > 0 && (pricing.visitorCount > 0 || pricing.memberCount === 0);
+      
+      if (requiresPayment) {
+        // Initiate PayFast payment
+        try {
+          const paymentResponse = await fetch('/api/payments/payfast/initiate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              bookingId: bookingData.id,
+              clubId: club.id,
+              userId: user.id,
+              slug: slug,
+              amount: pricing.total,
+              itemName: `Court Booking - ${court || 'Court'} - ${formattedDate?.full || date} ${time}`,
+              itemDescription: `${bookingType === 'singles' ? 'Singles' : 'Doubles'} booking for ${duration} minutes`,
+              userEmail: user.email || '',
+              userName: user.email?.split('@')[0] || 'User',
+              userPhone: '',
+            }),
+          });
+
+          const paymentResult = await paymentResponse.json();
+
+          if (!paymentResponse.ok) {
+            throw new Error(paymentResult.error || 'Failed to initiate payment');
+          }
+
+          // Update booking with payment amount and status
+          await supabase
+            .from('Bookings')
+            .update({
+              amount: pricing.total,
+              paymentStatus: 'pending',
+              paymentId: paymentResult.paymentId,
+            })
+            .eq('id', bookingData.id);
+
+          // Use embedded payment form
+          if (paymentResult.embedded && paymentResult.paymentFormUrl) {
+            // Store payment form URL and show embedded iframe
+            setPaymentFormUrl(paymentResult.paymentFormUrl);
+            setShowPaymentFrame(true);
+            // Don't set submitting to false here - payment is in progress
+            return;
+          } else {
+            throw new Error('Payment form URL not received');
+          }
+        } catch (paymentError: any) {
+          console.error('Error initiating payment:', paymentError);
+          // If payment fails, still create the booking but mark it as pending payment
+          await supabase
+            .from('Bookings')
+            .update({
+              amount: pricing.total,
+              paymentStatus: 'failed',
+            })
+            .eq('id', bookingData.id);
+          
+          throw new Error(`Payment initiation failed: ${paymentError.message || 'Unknown error'}. Booking created but payment is pending.`);
+        }
+      } else {
+        // No payment required - update booking status to confirmed
+        await supabase
+          .from('Bookings')
+          .update({
+            status: 'confirmed',
+            paymentStatus: 'paid', // Free for members
+            amount: 0,
+          })
+          .eq('id', bookingData.id);
+        
+        // Redirect to booking page with date and time selected to show the new booking
+        const params = new URLSearchParams();
+        if (date) params.set('date', date);
+        if (time) params.set('time', time);
+        router.push(`/club/${slug}?${params.toString()}`);
+      }
     } catch (err: any) {
       console.error('Error confirming booking:', err);
       let errorMessage = 'Failed to confirm booking. Please try again.';
@@ -414,26 +493,72 @@ function ConfirmBookingContent({ slug, clubSettings }: ConfirmClientProps) {
         )}
 
         {/* Action Buttons */}
-        <div className={styles.confirmButtonsContainer}>
-          <button
-            onClick={() => router.back()}
-            className={`${styles.confirmButton} ${styles.confirmButtonBack}`}
-            disabled={isSubmitting}
-          >
-            Back
-          </button>
-          <button
-            onClick={handleConfirmBooking}
-            disabled={isSubmitting || !club || !date || !time || !duration || !court}
-            className={`${styles.confirmButton} ${styles.confirmButtonSubmit}`}
-            style={{
-              backgroundColor: clubSettings.selectedColor,
-              borderColor: clubSettings.selectedColor
-            }}
-          >
-            {isSubmitting ? 'Processing...' : 'Confirm & Pay'}
-          </button>
-        </div>
+        {!showPaymentFrame && (
+          <div className={styles.confirmButtonsContainer}>
+            <button
+              onClick={() => router.back()}
+              className={`${styles.confirmButton} ${styles.confirmButtonBack}`}
+              disabled={isSubmitting}
+            >
+              Back
+            </button>
+            <button
+              onClick={handleConfirmBooking}
+              disabled={isSubmitting || !club || !date || !time || !duration || !court}
+              className={`${styles.confirmButton} ${styles.confirmButtonSubmit}`}
+              style={{
+                backgroundColor: clubSettings.selectedColor,
+                borderColor: clubSettings.selectedColor
+              }}
+            >
+              {isSubmitting ? 'Processing...' : 'Confirm & Pay'}
+            </button>
+          </div>
+        )}
+
+        {/* Embedded Payment Iframe */}
+        {showPaymentFrame && paymentFormUrl && (
+          <div style={{
+            marginTop: '32px',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              padding: '16px 24px',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            }}>
+              <h2 style={{
+                fontSize: '20px',
+                fontWeight: '600',
+                margin: 0,
+                color: clubSettings.fontColor,
+              }}>
+                Complete Your Payment
+              </h2>
+              <p style={{
+                fontSize: '14px',
+                margin: '8px 0 0 0',
+                color: 'rgba(255, 255, 255, 0.7)',
+              }}>
+                Please complete your payment to confirm your booking
+              </p>
+            </div>
+            <iframe
+              src={paymentFormUrl}
+              style={{
+                width: '100%',
+                height: '800px',
+                border: 'none',
+                display: 'block',
+              }}
+              title="PayFast Payment"
+              sandbox="allow-forms allow-scripts allow-same-origin allow-top-navigation"
+            />
+          </div>
+        )}
       </div>
 
       <ClubFooter fontColor={clubSettings.fontColor} />

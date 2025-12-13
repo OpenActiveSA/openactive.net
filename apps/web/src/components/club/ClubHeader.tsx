@@ -111,7 +111,21 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
         
         // Fetch from database (only if not cached)
         try {
-          const supabase = getSupabaseClientClient();
+          // Try to get Supabase client - it may throw if config is missing
+          let supabase;
+          try {
+            supabase = getSupabaseClientClient();
+          } catch (configError: any) {
+            // Supabase not configured - use email fallback
+            console.warn('Supabase not configured, using email as username:', configError.message);
+            if (!cachedName && !metadataName) {
+              setUserName(user.email?.split('@')[0] || 'User');
+            }
+            setUserAvatar(cachedAvatar || metadataAvatar || null);
+            setIsLoadingName(false);
+            return;
+          }
+
           const { data: userData, error } = await supabase
             .from('Users')
             .select('Firstname, Surname, avatarUrl')
@@ -119,8 +133,19 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             .maybeSingle();
           
           if (error) {
-            console.error('Error fetching user name from database:', error);
-            setUserAvatar(null);
+            // Suppress errors for placeholder/invalid Supabase URLs or network errors
+            const isNetworkError = error.message?.includes('Failed to fetch') || 
+                                  error.message?.includes('TypeError') ||
+                                  error.code === 'PGRST116'; // PostgREST connection error
+            const isConfigError = error.message?.includes('configuration missing');
+            
+            if (!isNetworkError && !isConfigError) {
+              console.error('Error fetching user name from database:', error);
+            }
+            if (!cachedName && !metadataName) {
+              setUserName(user.email?.split('@')[0] || 'User');
+            }
+            setUserAvatar(cachedAvatar || metadataAvatar || null);
             setIsLoadingName(false);
             return;
           }
@@ -198,7 +223,13 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
           .eq('is_active', true);
 
         if (clubsError || !clubsData) {
-          console.error('Error fetching clubs for role:', clubsError);
+          // Suppress errors for placeholder/invalid Supabase URLs or network errors
+          const isNetworkError = clubsError?.message?.includes('Failed to fetch') || 
+                                clubsError?.message?.includes('TypeError') ||
+                                clubsError?.code === 'PGRST116';
+          if (!isNetworkError) {
+            console.error('Error fetching clubs for role:', clubsError);
+          }
           setUserRole(null);
           return;
         }

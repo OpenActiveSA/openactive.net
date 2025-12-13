@@ -53,12 +53,46 @@ export function getSupabaseClient(options?: {
     // Check NEXT_PUBLIC_ first (available in both client and server)
     supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
     
+    // Check if URL is a placeholder (common placeholder patterns)
+    if (supabaseUrl && (
+      supabaseUrl.includes('your-project-id') || 
+      supabaseUrl.includes('your-project') ||
+      supabaseUrl.includes('example.com') ||
+      supabaseUrl === 'https://.supabase.co'
+    )) {
+      // URL is a placeholder - treat as not configured
+      supabaseUrl = undefined;
+    }
+    
     if (options?.useServiceRole) {
       // Service role key should NOT be exposed to client - only use on server
       supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      
+      // Check if service role key is valid (not a placeholder)
+      // New Supabase keys start with 'sb_secret_' and are shorter
+      // Old JWT keys are longer (200+ chars)
+      if (supabaseKey && (
+        supabaseKey.includes('your-') || 
+        supabaseKey.includes('paste-your') ||
+        (supabaseKey.length < 30 && !supabaseKey.startsWith('sb_secret_')) // Too short unless it's new format
+      )) {
+        // Service role key is invalid/placeholder - will fall back to anon key
+        supabaseKey = undefined;
+      }
     } else {
       // Anon key can be public - use NEXT_PUBLIC_ version for client-side
       supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+      
+      // Check if key is a placeholder
+      // New Supabase keys start with 'sb_publishable_' and are shorter
+      // Old JWT keys are longer (200+ chars)
+      if (supabaseKey && (
+        supabaseKey.includes('your-') || 
+        supabaseKey.includes('paste-your') ||
+        (supabaseKey.length < 30 && !supabaseKey.startsWith('sb_publishable_') && !supabaseKey.startsWith('eyJ')) // Too short unless it's new format or JWT
+      )) {
+        supabaseKey = undefined;
+      }
     }
   }
 
@@ -99,7 +133,7 @@ export function getSupabaseClient(options?: {
 }
 
 /**
- * Server-side Supabase client (uses service role key)
+ * Server-side Supabase client (uses service role key if available, falls back to anon key)
  * Use this for API routes and server components
  * 
  * Note: Server instances are not cached as they may need different configurations
@@ -109,7 +143,23 @@ export function getSupabaseServerClient(): SupabaseClient {
   // For server-side, we can create new instances as they're request-scoped
   // But we'll cache if no custom options are needed
   if (!serverInstance) {
-    serverInstance = getSupabaseClient({ useServiceRole: true });
+    // Check if service role key is available and valid
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // New Supabase keys start with 'sb_secret_' and are shorter (30-50 chars)
+    // Old JWT keys are longer (200+ chars)
+    const hasServiceRole = !!serviceRoleKey && 
+                          !serviceRoleKey.includes('your-') &&
+                          !serviceRoleKey.includes('paste-your') &&
+                          (serviceRoleKey.startsWith('sb_secret_') || serviceRoleKey.length > 50);
+    
+    if (hasServiceRole) {
+      // Use service role key for full database access
+      serverInstance = getSupabaseClient({ useServiceRole: true });
+    } else {
+      // Fall back to anon key (works for read operations if RLS allows)
+      console.warn('[Supabase] Service role key not available, using anon key for server client. Some operations may be limited by RLS policies.');
+      serverInstance = getSupabaseClient({ useServiceRole: false });
+    }
   }
   return serverInstance;
 }

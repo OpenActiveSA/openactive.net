@@ -38,40 +38,51 @@ export default async function ClubPage({ params }: ClubPageProps) {
   let hoverColor = '#f0f0f0';
 
   try {
-    const supabase = getSupabaseServerClient();
+    // Try to get Supabase client - handle missing configuration gracefully
+    let supabase;
+    try {
+      supabase = getSupabaseServerClient();
+    } catch (configError: any) {
+      // Supabase not configured - log warning and continue with defaults
+      console.warn('Supabase not configured, club page will use default values:', configError.message);
+      logError('ClubPage', configError, { slug, action: 'getSupabaseServerClient' });
+      // Continue with null club - the page will render with defaults
+    }
     
-    // Try to fetch with all columns first, if that fails, try without branding columns
+    // Only try to fetch club data if Supabase is configured
     let clubData, error;
-    
-    // First attempt: with all columns including branding and settings
-    // Get all active clubs and find by slug
-    const result = await supabase
-      .from('Clubs')
-      .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays, country, timezone')
-      .eq('is_active', true);
-    
-    clubData = result.data;
-    error = result.error;
-
-    // If error and it's about missing columns, try without booking days columns (they might not exist yet)
-    if (error && (error.code === '42703' || error.message?.includes('column'))) {
-      const fallbackResult = await supabase
+    if (supabase) {
+      // Try to fetch with all columns first, if that fails, try without branding columns
+      // First attempt: with all columns including branding and settings
+      // Get all active clubs and find by slug
+      const result = await supabase
         .from('Clubs')
-        .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, country, timezone')
+        .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, membersBookingDays, visitorBookingDays, coachBookingDays, clubManagerBookingDays, country, timezone')
         .eq('is_active', true);
       
-      clubData = fallbackResult.data;
-      error = fallbackResult.error;
-      
-      // If still error, try without country and timezone (they might not exist yet)
+      clubData = result.data;
+      error = result.error;
+
+      // If error and it's about missing columns, try without booking days columns (they might not exist yet)
       if (error && (error.code === '42703' || error.message?.includes('column'))) {
-        const fallbackResult2 = await supabase
+        const fallbackResult = await supabase
           .from('Clubs')
-          .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
+          .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration, country, timezone')
           .eq('is_active', true);
         
-        clubData = fallbackResult2.data;
-        error = fallbackResult2.error;
+        clubData = fallbackResult.data;
+        error = fallbackResult.error;
+        
+        // If still error, try without country and timezone (they might not exist yet)
+        if (error && (error.code === '42703' || error.message?.includes('column'))) {
+          const fallbackResult2 = await supabase
+            .from('Clubs')
+            .select('id, name, logo, backgroundColor, fontColor, selectedColor, actionColor, hoverColor, openingTime, closingTime, bookingSlotInterval, sessionDuration')
+            .eq('is_active', true);
+          
+          clubData = fallbackResult2.data;
+          error = fallbackResult2.error;
+        }
       }
     }
 

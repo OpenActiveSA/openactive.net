@@ -81,3 +81,5 @@ logWarning('ClubPageClient', 'Invalid interval, using default 60', { interval })
 - Stack traces are only logged in development mode
 
 
+
+

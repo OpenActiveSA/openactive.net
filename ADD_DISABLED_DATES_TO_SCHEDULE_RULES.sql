@@ -49,3 +49,5 @@ COMMIT;
 -- AND table_name = 'ScheduleRules'
 -- AND column_name = 'disabledDates';
 
+
+

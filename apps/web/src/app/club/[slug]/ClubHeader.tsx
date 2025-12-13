@@ -36,7 +36,18 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
     const fetchUserName = async () => {
       if (user && user.id) {
         try {
-          const supabase = getSupabaseClientClient();
+          // Try to get Supabase client - it may throw if config is missing
+          let supabase;
+          try {
+            supabase = getSupabaseClientClient();
+          } catch (configError: any) {
+            // Supabase not configured - use email fallback
+            console.warn('Supabase not configured, using email as username:', configError.message);
+            setUserName(user.email?.split('@')[0] || 'User');
+            setUserAvatar(null);
+            return;
+          }
+
           const { data: userData, error } = await supabase
             .from('Users')
             .select('Firstname, Surname, avatarUrl')
@@ -64,9 +75,10 @@ export default function ClubHeader({ logo, fontColor, backgroundColor, selectedC
             setUserName(user.email?.split('@')[0] || 'User');
             setUserAvatar(null);
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error('Error fetching user name:', err);
           setUserName(user.email?.split('@')[0] || 'User');
+          setUserAvatar(null);
         }
       } else {
         setUserName('');

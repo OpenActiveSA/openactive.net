@@ -1439,6 +1439,19 @@ export default function ClubAdminPage({ params }: ClubAdminProps) {
             </svg>
             {!isSidebarCollapsed && <span>Settings</span>}
           </button>
+
+          <a
+            href={`/club/${slug}/admin/payment-test`}
+            className={styles.navItem}
+            title="Payment Test"
+            style={{ textDecoration: 'none', color: 'inherit' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+              <line x1="1" y1="10" x2="23" y2="10"></line>
+            </svg>
+            {!isSidebarCollapsed && <span>Payment Test</span>}
+          </a>
         </nav>
 
         <div className={styles.sidebarFooter}>

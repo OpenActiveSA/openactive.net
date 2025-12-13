@@ -26,14 +26,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Mark component as mounted
     mountedRef.current = true;
     
-    const supabase = getSupabaseClientClient();
-    
     // Helper function to safely update state only if component is mounted
     const safeSetState = (updater: () => void) => {
       if (mountedRef.current) {
         updater();
       }
     };
+    
+    // Try to get Supabase client - handle missing configuration gracefully
+    let supabase;
+    try {
+      supabase = getSupabaseClientClient();
+    } catch (configError: any) {
+      // Supabase not configured - app can still work without auth
+      console.warn('Supabase not configured, auth features disabled:', configError.message);
+      safeSetState(() => {
+        setUser(null);
+        setSession(null);
+        setLoading(false);
+      });
+      return; // Exit early if Supabase isn't configured
+    }
     
     // Get initial session with error handling
     supabase.auth.getSession().then(({ data: { session }, error }) => {
@@ -114,7 +127,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      const supabase = getSupabaseClientClient();
+      // Try to get Supabase client - handle missing configuration
+      let supabase;
+      try {
+        supabase = getSupabaseClientClient();
+      } catch (configError) {
+        // Supabase not configured - just clear local state
+        setUser(null);
+        setSession(null);
+        clearAuthTokens();
+        return;
+      }
+      
       // Try to sign out, but clear local state even if it fails
       const { error } = await supabase.auth.signOut();
       if (error) {
@@ -129,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Clear state even if signOut fails
       setUser(null);
       setSession(null);
+      clearAuthTokens();
       // Don't throw - just clear the state
     }
   };
